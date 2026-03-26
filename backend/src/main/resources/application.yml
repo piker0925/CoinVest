@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: coinvest
+  profiles:
+    active: local
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQL15Dialect
+        format_sql: true
+        use_sql_comments: true
+
+  flyway:
+    locations: classpath:db/migration
+    enabled: true
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+  shutdown: graceful
+  servlet:
+    context-path: /
+
+logging:
+  level:
+    root: INFO
+    com.coinvest: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "[%d{HH:mm:ss.SSS}] [%-5level] [%thread] %logger{36} - %msg%n"

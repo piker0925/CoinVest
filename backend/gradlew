@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Gradle wrapper script
+
+GRADLE_HOME="$HOME/.gradle/wrapper/dists/gradle-8.6-bin"
+GRADLE_JAR="$GRADLE_HOME/gradle-8.6/lib/gradle-8.6.jar"
+
+if [ ! -f "$GRADLE_JAR" ]; then
+    echo "Downloading Gradle 8.6..."
+    mkdir -p "$GRADLE_HOME"
+    cd "$GRADLE_HOME" || exit 1
+    curl -L https://services.gradle.org/distributions/gradle-8.6-bin.zip -o gradle.zip
+    unzip -q gradle.zip
+    rm gradle.zip
+fi
+
+exec java -jar "$GRADLE_JAR" "$@"
