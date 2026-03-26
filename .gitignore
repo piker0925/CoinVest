@@ -1,0 +1,55 @@
+# Project docs (개인용)
+docs/
+
+# AI Tool Config
+.agent/
+.claude/
+
+# Java/Gradle
+target/
+build/
+out/
+*.class
+*.jar
+*.war
+*.nar
+*.zip
+*.tar.gz
+
+.gradle/
+!gradle-wrapper.jar
+.gradletasknamecache
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Node (프론트엔드)
+node_modules/
+dist/
+npm-debug.log*
+yarn-error.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temp
+tmp/
+temp/
+*.tmp
