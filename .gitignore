@@ -2,8 +2,10 @@
 docs/
 
 # AI Tool Config
-.agent/
+.gemini/
 .claude/
+GEMINI.md
+CLAUDE.md
 
 # Java/Gradle
 target/
