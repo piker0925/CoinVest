@@ -13,8 +13,17 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 	// 404 Not Found (리소스 없음 또는 접근 권한 없음 - IDOR 방어)
 	PORTFOLIO_NOT_FOUND("포트폴리오를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+	PORTFOLIO_LIMIT_EXCEEDED("사용자당 최대 5개의 포트폴리오만 생성할 수 있습니다", HttpStatus.BAD_REQUEST),
+	PORTFOLIO_INVALID_WEIGHT("자산 비중의 합은 반드시 100%여야 합니다", HttpStatus.BAD_REQUEST),
 	ALERT_NOT_FOUND("알림을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 	USER_NOT_FOUND("사용자를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+
+	// Trading
+	TRADING_INSUFFICIENT_BALANCE("가용 잔고가 부족합니다", HttpStatus.BAD_REQUEST),
+	TRADING_INSUFFICIENT_QUANTITY("보유 수량이 부족합니다", HttpStatus.BAD_REQUEST),
+	TRADING_INVALID_ORDER_PRICE("지정가 주문 시 가격은 필수이며 0보다 커야 합니다", HttpStatus.BAD_REQUEST),
+	TRADING_ORDER_NOT_FOUND("주문을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+	TRADING_ORDER_NOT_CANCELABLE("취소 가능한 상태의 주문이 아닙니다", HttpStatus.BAD_REQUEST),
 
 	// 409 Conflict (데이터 충돌)
 	AUTH_EMAIL_DUPLICATE("이미 사용 중인 이메일입니다", HttpStatus.CONFLICT),
