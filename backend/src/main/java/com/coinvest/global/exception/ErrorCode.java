@@ -23,6 +23,12 @@ public enum ErrorCode {
 	AUTH_INVALID_TOKEN("유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
 	AUTH_INVALID_CREDENTIALS("이메일 또는 비밀번호가 일치하지 않습니다", HttpStatus.UNAUTHORIZED),
 
+	// 403 Forbidden (권한 없음)
+	AUTH_FORBIDDEN("접근 권한이 없습니다", HttpStatus.FORBIDDEN),
+
+	// 429 Too Many Requests (요청 초과)
+	AUTH_TOO_MANY_ATTEMPTS("로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요", HttpStatus.TOO_MANY_REQUESTS),
+
 	// 400 Bad Request (입력값 오류)
 	COMMON_INVALID_INPUT("입력값이 유효하지 않습니다", HttpStatus.BAD_REQUEST),
 
