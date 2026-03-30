@@ -22,6 +22,10 @@ spring:
     virtual:
       enabled: true
 
+upbit:
+  websocket:
+    url: wss://api.upbit.com/websocket/v1
+
 server:
   port: 8080
   shutdown: graceful
