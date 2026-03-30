@@ -16,9 +16,12 @@ public enum ErrorCode {
 	ALERT_NOT_FOUND("알림을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 	USER_NOT_FOUND("사용자를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
+	// 409 Conflict (데이터 충돌)
+	AUTH_EMAIL_DUPLICATE("이미 사용 중인 이메일입니다", HttpStatus.CONFLICT),
+
 	// 401 Unauthorized (인증 실패)
 	AUTH_INVALID_TOKEN("유효하지 않은 토큰입니다", HttpStatus.UNAUTHORIZED),
-	AUTH_EMAIL_DUPLICATE("이미 사용 중인 이메일입니다", HttpStatus.UNAUTHORIZED),
+	AUTH_INVALID_CREDENTIALS("이메일 또는 비밀번호가 일치하지 않습니다", HttpStatus.UNAUTHORIZED),
 
 	// 400 Bad Request (입력값 오류)
 	COMMON_INVALID_INPUT("입력값이 유효하지 않습니다", HttpStatus.BAD_REQUEST),
