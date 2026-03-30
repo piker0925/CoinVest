@@ -1,15 +1,16 @@
 -- Phase 1 초기 스키마
 -- 2주차부터 추가 테이블 생성 (User, Auth, Portfolio)
 
--- users 테이블 (2주차: JWT 인증)
+-- users 테이블 (Phase 1: 인증 및 회원가입)
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
+    password_hash VARCHAR(255) NOT NULL, -- 해싱된 비밀번호
     nickname VARCHAR(100) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'USER', -- USER, ADMIN
     auth_provider VARCHAR(50) NOT NULL DEFAULT 'LOCAL', -- LOCAL, KAKAO
     provider_id VARCHAR(255),
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE, -- soft-delete 대용
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

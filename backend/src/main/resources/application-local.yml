@@ -32,6 +32,11 @@ spring:
       max-poll-records: 500
       session-timeout-ms: 30000
 
+jwt:
+  secret: zAt8Wvpx6pY5E2dG9nK3mJ7rQ4u7x!A%D*G-KaPdSgVkYp3s6v9y$B?E(H+MbQeThWmZq4t7w!z%C*F-JaNcRfUjXn2r5u8x/A?D(G+KbPeSgVkYp3s6v9y$B&E)H@Mc
+  access-token-expiration: 1800000 # 30분 (30 * 60 * 1000)
+  refresh-token-expiration: 604800000 # 7일 (7 * 24 * 60 * 60 * 1000)
+
 logging:
   level:
     root: INFO
