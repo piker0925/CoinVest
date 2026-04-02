@@ -25,6 +25,10 @@ public class VirtualAccount extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
@@ -39,7 +43,8 @@ public class VirtualAccount extends BaseEntity {
      * 잠금 잔고 (지정가 매수 주문 시 사용).
      */
     @Column(name = "locked_krw", nullable = false, precision = 20, scale = 4)
-    private BigDecimal lockedKrw;
+    @Builder.Default
+    private BigDecimal lockedKrw = BigDecimal.ZERO;
 
     /**
      * 가용 잔고 조회.
@@ -53,7 +58,7 @@ public class VirtualAccount extends BaseEntity {
      */
     public void decreaseBalance(BigDecimal amount) {
         if (getAvailableBalance().compareTo(amount) < 0) {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT); // 추후 INSUFFICIENT_BALANCE 추가 필요
+            throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
         }
         this.balanceKrw = this.balanceKrw.subtract(amount);
     }
@@ -70,7 +75,7 @@ public class VirtualAccount extends BaseEntity {
      */
     public void lockBalance(BigDecimal amount) {
         if (getAvailableBalance().compareTo(amount) < 0) {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+            throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
         }
         this.lockedKrw = this.lockedKrw.add(amount);
     }

@@ -26,6 +26,10 @@ public class Position extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -40,16 +44,47 @@ public class Position extends BaseEntity {
     private BigDecimal avgBuyPrice;
 
     /**
-     * 보유 수량.
+     * 보유 수량 (총 수량 = 가용 수량 + 잠금 수량).
      */
     @Column(nullable = false, precision = 30, scale = 18)
     private BigDecimal quantity;
+
+    /**
+     * 지정가 매도 주문을 위해 잠긴 수량.
+     */
+    @Column(name = "locked_quantity", nullable = false, precision = 30, scale = 18)
+    @Builder.Default
+    private BigDecimal lockedQuantity = BigDecimal.ZERO;
 
     /**
      * 누적 실현 손익.
      */
     @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
     private BigDecimal realizedPnl;
+
+    /**
+     * 가용 수량 조회.
+     */
+    public BigDecimal getAvailableQuantity() {
+        return quantity.subtract(lockedQuantity);
+    }
+
+    /**
+     * 지정가 매도 주문 시 수량 잠금.
+     */
+    public void lockQuantity(BigDecimal amount) {
+        if (getAvailableQuantity().compareTo(amount) < 0) {
+            throw new com.coinvest.global.exception.BusinessException(com.coinvest.global.exception.ErrorCode.TRADING_INSUFFICIENT_QUANTITY);
+        }
+        this.lockedQuantity = this.lockedQuantity.add(amount);
+    }
+
+    /**
+     * 지정가 취소 또는 체결 시 잠금 해제.
+     */
+    public void unlockQuantity(BigDecimal amount) {
+        this.lockedQuantity = this.lockedQuantity.subtract(amount);
+    }
 
     /**
      * 매수 시 포지션 갱신 (가중 평균가 계산).
@@ -60,7 +95,7 @@ public class Position extends BaseEntity {
         this.quantity = this.quantity.add(amount);
         
         if (this.quantity.compareTo(BigDecimal.ZERO) > 0) {
-            this.avgBuyPrice = totalCost.divide(this.quantity, 4, RoundingMode.HALF_UP);
+            this.avgBuyPrice = totalCost.divide(this.quantity, 8, RoundingMode.HALF_UP);
         }
     }
 
@@ -68,7 +103,7 @@ public class Position extends BaseEntity {
      * 매도 시 포지션 갱신 및 실현 손익 누적.
      */
     public void subtractPosition(BigDecimal price, BigDecimal amount) {
-        if (this.quantity.compareTo(amount) < 0) {
+        if (getAvailableQuantity().compareTo(amount) < 0) {
             throw new com.coinvest.global.exception.BusinessException(com.coinvest.global.exception.ErrorCode.TRADING_INSUFFICIENT_QUANTITY);
         }
 
