@@ -37,6 +37,7 @@ public enum ErrorCode {
 
 	// 429 Too Many Requests (요청 초과)
 	AUTH_TOO_MANY_ATTEMPTS("로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요", HttpStatus.TOO_MANY_REQUESTS),
+	COMMON_TOO_MANY_REQUESTS("요청이 너무 많습니다. 잠시 후 다시 시도해주세요", HttpStatus.TOO_MANY_REQUESTS),
 
 	// 400 Bad Request (입력값 오류)
 	COMMON_INVALID_INPUT("입력값이 유효하지 않습니다", HttpStatus.BAD_REQUEST),
