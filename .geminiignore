@@ -1,0 +1,39 @@
+# .geminiignore - Gemini CLI 전용 무시 설정
+# .gitignore 설정을 기반으로 하되, AI 작업에 필수적인 폴더는 제외(!)함.
+
+# Java/Gradle/Build
+target/
+build/
+out/
+.gradle/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment & Logs
+.env
+.env.*.local
+logs/
+*.log
+
+# Node (프론트엔드)
+node_modules/
+dist/
+
+# Database & Temp
+*.db
+*.sqlite
+tmp/
+temp/
+
+# --- 필수 AI 지침 및 문서 (Git은 무시하지만 Gemini는 읽어야 함) ---
+!docs/
+!.gemini/
+!.claude/
+!GEMINI.md
+!CLAUDE.md

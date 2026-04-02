@@ -44,6 +44,9 @@ dependencies {
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-database-postgresql'
 
+	// Hibernate Dialect fix for Spring Boot 3.4.0 with PostgreSQL
+	implementation 'org.hibernate.orm:hibernate-core:6.6.2.Final'
+
 	// Lombok
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

@@ -9,6 +9,7 @@ import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioCreateRequest;
 import com.coinvest.portfolio.dto.PortfolioResponse;
+import com.coinvest.portfolio.dto.PortfolioUpdateRequest;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

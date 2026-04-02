@@ -7,7 +7,7 @@ import lombok.Getter;
  * 모든 도메인 예외가 이를 상속받아 일관된 에러 처리를 보장.
  */
 @Getter
-public abstract class BusinessException extends RuntimeException {
+public class BusinessException extends RuntimeException {
 	private final ErrorCode errorCode;
 
 	public BusinessException(ErrorCode errorCode) {
