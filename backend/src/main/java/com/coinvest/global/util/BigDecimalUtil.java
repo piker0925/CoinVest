@@ -1,5 +1,6 @@
 package com.coinvest.global.util;
 
+import com.coinvest.fx.domain.Currency;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -14,16 +15,39 @@ import java.math.RoundingMode;
 public final class BigDecimalUtil {
 
     private static final int KRW_SCALE = 0;
+    private static final int USD_SCALE = 2;
+    private static final int FX_RATE_SCALE = 6;
     private static final int COIN_SCALE = 8;
     private static final int WEIGHT_SCALE = 4;
 
     /**
      * 원화 잔고 및 수수료 정책 (소수점 이하 버림).
      * 예: 12.5원 -> 12원
+     * @deprecated 다중 통화 구조 도입에 따라 formatAmount(value, Currency) 사용 권장
      */
+    @Deprecated
     public static BigDecimal formatKrw(BigDecimal value) {
         if (value == null) return BigDecimal.ZERO;
         return value.setScale(KRW_SCALE, RoundingMode.DOWN);
+    }
+
+    /**
+     * 통화별 잔고 포맷팅 (KRW는 소수점 0자리, USD는 2자리).
+     */
+    public static BigDecimal formatAmount(BigDecimal value, Currency currency) {
+        if (value == null) return BigDecimal.ZERO;
+        if (currency == Currency.KRW) {
+            return value.setScale(KRW_SCALE, RoundingMode.DOWN);
+        }
+        return value.setScale(USD_SCALE, RoundingMode.DOWN);
+    }
+
+    /**
+     * 환율 포맷팅 (소수점 6자리).
+     */
+    public static BigDecimal formatExchangeRate(BigDecimal value) {
+        if (value == null) return BigDecimal.ZERO;
+        return value.setScale(FX_RATE_SCALE, RoundingMode.HALF_UP);
     }
 
     /**
