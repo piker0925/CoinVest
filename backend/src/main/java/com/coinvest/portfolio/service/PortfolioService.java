@@ -4,9 +4,8 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.global.common.KafkaTopicConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
-import com.coinvest.portfolio.domain.Portfolio;
-import com.coinvest.portfolio.domain.PortfolioAsset;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.domain.*;
+import com.coinvest.portfolio.repository.AlertSettingRepository;
 import com.coinvest.portfolio.dto.PortfolioCreateRequest;
 import com.coinvest.portfolio.dto.PortfolioResponse;
 import com.coinvest.portfolio.dto.PortfolioUpdateRequest;
@@ -31,6 +30,7 @@ import java.util.stream.Collectors;
 public class PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
+    private final AlertSettingRepository alertSettingRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     private static final int MAX_PORTFOLIO_COUNT = 5;
@@ -66,7 +66,15 @@ public class PortfolioService {
 
         Portfolio savedPortfolio = portfolioRepository.save(portfolio);
 
-        // 4. Kafka 이벤트 발행
+        // 4. 기본 알림 설정 생성
+        AlertSetting alertSetting = AlertSetting.builder()
+                .portfolio(savedPortfolio)
+                .deviationThreshold(new BigDecimal("0.0500")) // 기본 5%
+                .isActive(true)
+                .build();
+        alertSettingRepository.save(alertSetting);
+
+        // 5. Kafka 이벤트 발행
         publishPortfolioEvent(savedPortfolio, PortfolioUpdatedEvent.UpdateType.CREATE);
 
         return PortfolioResponse.from(savedPortfolio);
