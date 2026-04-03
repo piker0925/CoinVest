@@ -59,7 +59,7 @@ class RebalancingServiceTest {
                 .totalEvaluationKrw(new BigDecimal("100000"))
                 .assetValuations(Arrays.asList(
                         PortfolioValuation.AssetValuation.builder()
-                                .marketCode("KRW-BTC")
+                                .universalCode("CRYPTO:BTC")
                                 .currentPrice(new BigDecimal("100000")) // BTC 가격 10만
                                 .currentEvaluationKrw(new BigDecimal("60000")) // 현재 60%
                                 .currentWeight(new BigDecimal("0.6000"))
@@ -101,7 +101,7 @@ class RebalancingServiceTest {
                 .totalEvaluationKrw(new BigDecimal("100000"))
                 .assetValuations(Arrays.asList(
                         PortfolioValuation.AssetValuation.builder()
-                                .marketCode("KRW-BTC")
+                                .universalCode("CRYPTO:BTC")
                                 .currentPrice(new BigDecimal("100000"))
                                 .currentEvaluationKrw(new BigDecimal("50010")) 
                                 .currentWeight(new BigDecimal("0.5001")) // 현재 50.01%

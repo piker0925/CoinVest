@@ -106,12 +106,12 @@ class TradingServiceTest {
         
         Position existingPosition = Position.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .avgBuyPrice(new BigDecimal("90000000"))
                 .quantity(new BigDecimal("0.5"))
                 .realizedPnl(BigDecimal.ZERO)
                 .build();
-        given(positionRepository.findByUserIdAndMarketCode(userId, marketCode)).willReturn(Optional.of(existingPosition));
+        given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.of(existingPosition));
 
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
         given(positionRepository.save(any(Position.class))).willAnswer(inv -> inv.getArgument(0));
@@ -135,7 +135,7 @@ class TradingServiceTest {
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
         given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
-        given(positionRepository.findByUserIdAndMarketCode(userId, marketCode)).willReturn(Optional.empty());
+        given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.empty());
 
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
         given(positionRepository.save(any(Position.class))).willAnswer(inv -> inv.getArgument(0));
@@ -161,7 +161,7 @@ class TradingServiceTest {
 
         Position position = Position.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .avgBuyPrice(new BigDecimal("90000000")) // 9000만 평단
                 .quantity(new BigDecimal("0.2")) // 0.2개 보유
                 .realizedPnl(new BigDecimal("10000")) // 기존 실현 손익
@@ -170,7 +170,7 @@ class TradingServiceTest {
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
         given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
-        given(positionRepository.findByUserIdAndMarketCode(userId, marketCode)).willReturn(Optional.of(position));
+        given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.of(position));
 
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
         given(positionRepository.save(any(Position.class))).willAnswer(inv -> inv.getArgument(0));
@@ -226,14 +226,14 @@ class TradingServiceTest {
 
         Position position = Position.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .avgBuyPrice(new BigDecimal("90000000"))
                 .quantity(new BigDecimal("0.5"))
                 .realizedPnl(BigDecimal.ZERO)
                 .build();
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
-        given(positionRepository.findByUserIdAndMarketCode(userId, marketCode)).willReturn(Optional.of(position));
+        given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.of(position));
 
         given(orderRepository.save(any(Order.class))).willAnswer(invocation -> {
             Order order = invocation.getArgument(0);

@@ -73,7 +73,7 @@ class LimitOrderMatchingServiceTest {
 
         buyOrder = Order.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .side(OrderSide.BUY)
                 .type(OrderType.LIMIT)
                 .price(new BigDecimal("100000000"))
@@ -84,7 +84,7 @@ class LimitOrderMatchingServiceTest {
 
         sellOrder = Order.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .side(OrderSide.SELL)
                 .type(OrderType.LIMIT)
                 .price(new BigDecimal("100000000"))
@@ -101,7 +101,7 @@ class LimitOrderMatchingServiceTest {
 
         position = Position.builder()
                 .user(testUser)
-                .marketCode(marketCode)
+                .universalCode(marketCode)
                 .avgBuyPrice(new BigDecimal("90000000"))
                 .quantity(new BigDecimal("0.5"))
                 .lockedQuantity(new BigDecimal("0.1"))
@@ -123,7 +123,7 @@ class LimitOrderMatchingServiceTest {
         given(orderRepository.updateStatusToFilledIfPending(100L)).willReturn(1);
         given(orderRepository.findById(100L)).willReturn(Optional.of(buyOrder));
         given(virtualAccountRepository.findByUserId(1L)).willReturn(Optional.of(virtualAccount));
-        given(positionRepository.findByUserIdAndMarketCode(1L, marketCode)).willReturn(Optional.of(position));
+        given(positionRepository.findByUserIdAndUniversalCode(1L, marketCode)).willReturn(Optional.of(position));
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
 
         // Act
@@ -152,7 +152,7 @@ class LimitOrderMatchingServiceTest {
         given(orderRepository.updateStatusToFilledIfPending(101L)).willReturn(1);
         given(orderRepository.findById(101L)).willReturn(Optional.of(sellOrder));
         given(virtualAccountRepository.findByUserId(1L)).willReturn(Optional.of(virtualAccount));
-        given(positionRepository.findByUserIdAndMarketCode(1L, marketCode)).willReturn(Optional.of(position));
+        given(positionRepository.findByUserIdAndUniversalCode(1L, marketCode)).willReturn(Optional.of(position));
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
 
         // Act

@@ -14,6 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.coinvest.portfolio.repository.AlertSettingRepository;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
@@ -37,6 +39,9 @@ class PortfolioServiceTest {
     private PortfolioRepository portfolioRepository;
 
     @Mock
+    private AlertSettingRepository alertSettingRepository;
+
+    @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     private User user;
@@ -50,12 +55,16 @@ class PortfolioServiceTest {
     @DisplayName("정상적인 비중 합(100%)으로 포트폴리오를 생성할 수 있다.")
     void createPortfolioSuccess() {
         // given
-        PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("KRW-BTC", new BigDecimal("0.7"));
-        PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("KRW-ETH", new BigDecimal("0.3"));
+        PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("CRYPTO:BTC", new BigDecimal("0.7"));
+        PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.3"));
         PortfolioCreateRequest request = new PortfolioCreateRequest("My Portfolio", new BigDecimal("1000000"), Arrays.asList(asset1, asset2));
 
         given(portfolioRepository.countByUser(user)).willReturn(0L);
-        given(portfolioRepository.save(any(Portfolio.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(portfolioRepository.save(any(Portfolio.class))).willAnswer(invocation -> {
+            Portfolio p = invocation.getArgument(0);
+            ReflectionTestUtils.setField(p, "id", 1L);
+            return p;
+        });
 
         // when
         PortfolioResponse response = portfolioService.createPortfolio(user, request);
@@ -70,8 +79,8 @@ class PortfolioServiceTest {
     @DisplayName("비중 합이 100%가 아니면 예외가 발생한다.")
     void createPortfolioInvalidWeight() {
         // given
-        PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("KRW-BTC", new BigDecimal("0.7"));
-        PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("KRW-ETH", new BigDecimal("0.2")); // 합 0.9
+        PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("CRYPTO:BTC", new BigDecimal("0.7"));
+        PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.2")); // 합 0.9
         PortfolioCreateRequest request = new PortfolioCreateRequest("Invalid Portfolio", new BigDecimal("1000000"), Arrays.asList(asset1, asset2));
 
         given(portfolioRepository.countByUser(user)).willReturn(0L);
