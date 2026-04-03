@@ -19,6 +19,7 @@ public enum ErrorCode {
 	USER_NOT_FOUND("사용자를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
 	// Trading
+	TRADING_BALANCE_NOT_FOUND("해당 통화의 잔고를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 	TRADING_INSUFFICIENT_BALANCE("가용 잔고가 부족합니다", HttpStatus.BAD_REQUEST),
 	TRADING_INSUFFICIENT_QUANTITY("보유 수량이 부족합니다", HttpStatus.BAD_REQUEST),
 	TRADING_INVALID_ORDER_PRICE("지정가 주문 시 가격은 필수이며 0보다 커야 합니다", HttpStatus.BAD_REQUEST),
