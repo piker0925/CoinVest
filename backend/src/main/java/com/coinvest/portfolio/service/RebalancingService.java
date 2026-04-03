@@ -134,7 +134,7 @@ public class RebalancingService {
             }
 
             proposals.add(RebalancingProposal.builder()
-                    .marketCode(av.getMarketCode())
+                    .universalCode(av.getUniversalCode())
                     .currentWeight(currentWeight)
                     .targetWeight(targetWeight)
                     .deviation(deviation)
@@ -166,7 +166,7 @@ public class RebalancingService {
 
             if (deviation.compareTo(threshold) > 0) {
                 log.info("Rebalancing alert triggered: [portfolioId={}, market={}, deviation={}, threshold={}]",
-                        valuation.getPortfolioId(), av.getMarketCode(), deviation, threshold);
+                        valuation.getPortfolioId(), av.getUniversalCode(), deviation, threshold);
                 return true;
             }
         }

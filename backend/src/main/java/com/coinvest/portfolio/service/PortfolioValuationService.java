@@ -42,13 +42,13 @@ public class PortfolioValuationService {
 
         // 1. 각 자산의 현재 가치 계산 및 총액 합산
         for (PortfolioAsset asset : portfolio.getAssets()) {
-            BigDecimal currentPrice = getCurrentPrice(asset.getMarketCode());
+            BigDecimal currentPrice = getCurrentPrice(asset.getUniversalCode());
             BigDecimal evaluationKrw = asset.getQuantity().multiply(currentPrice);
             
             totalEvaluationKrw = totalEvaluationKrw.add(evaluationKrw);
             
             assetValuations.add(PortfolioValuation.AssetValuation.builder()
-                    .marketCode(asset.getMarketCode())
+                    .universalCode(asset.getUniversalCode())
                     .currentPrice(currentPrice)
                     .quantity(asset.getQuantity())
                     .currentEvaluationKrw(evaluationKrw)
@@ -81,8 +81,8 @@ public class PortfolioValuationService {
         return result;
     }
 
-    private BigDecimal getCurrentPrice(String marketCode) {
-        String key = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, marketCode);
+    private BigDecimal getCurrentPrice(String universalCode) {
+        String key = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
         Object price = redisTemplate.opsForValue().get(key);
         return price != null ? new BigDecimal(price.toString()) : BigDecimal.ZERO;
     }

@@ -65,8 +65,8 @@ public class LimitOrderMatchingService {
         }
     }
 
-    private void matchSellOrders(String marketCode, BigDecimal currentPrice) {
-        String key = "trading:limit-order:sell:" + marketCode;
+    private void matchSellOrders(String universalCode, BigDecimal currentPrice) {
+        String key = "trading:limit-order:sell:" + universalCode;
         // 매도: 현재가보다 낮거나 같은 지정가 주문을 찾음
         Set<Object> matchingOrderIds = redisTemplate.opsForZSet().rangeByScore(key, 0, currentPrice.doubleValue());
         
@@ -115,10 +115,10 @@ public class LimitOrderMatchingService {
         account.decreaseBalance(actualKrw);
 
         // 3. 포지션 갱신
-        Position position = positionRepository.findByUserIdAndMarketCode(order.getUser().getId(), order.getMarketCode())
+        Position position = positionRepository.findByUserIdAndUniversalCode(order.getUser().getId(), order.getUniversalCode())
                 .orElseGet(() -> Position.builder()
                         .user(order.getUser())
-                        .marketCode(order.getMarketCode())
+                        .universalCode(order.getUniversalCode())
                         .avgBuyPrice(BigDecimal.ZERO)
                         .quantity(BigDecimal.ZERO)
                         .realizedPnl(BigDecimal.ZERO)
@@ -130,7 +130,7 @@ public class LimitOrderMatchingService {
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
-                .marketCode(order.getMarketCode())
+                .universalCode(order.getUniversalCode())
                 .price(currentPrice)
                 .quantity(quantity)
                 .fee(actualFee)
@@ -142,7 +142,7 @@ public class LimitOrderMatchingService {
                 trade.getId(),
                 order.getId(),
                 order.getUser().getId(),
-                order.getMarketCode(),
+                order.getUniversalCode(),
                 currentPrice,
                 quantity,
                 actualFee,
@@ -165,7 +165,7 @@ public class LimitOrderMatchingService {
 
         Order order = orderRepository.findById(orderId).orElseThrow();
         VirtualAccount account = virtualAccountRepository.findByUserId(order.getUser().getId()).orElseThrow();
-        Position position = positionRepository.findByUserIdAndMarketCode(order.getUser().getId(), order.getMarketCode()).orElseThrow();
+        Position position = positionRepository.findByUserIdAndUniversalCode(order.getUser().getId(), order.getUniversalCode()).orElseThrow();
 
         BigDecimal quantity = order.getQuantity();
 
@@ -186,7 +186,7 @@ public class LimitOrderMatchingService {
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
-                .marketCode(order.getMarketCode())
+                .universalCode(order.getUniversalCode())
                 .price(currentPrice)
                 .quantity(quantity)
                 .fee(fee)
@@ -198,7 +198,7 @@ public class LimitOrderMatchingService {
                 trade.getId(),
                 order.getId(),
                 order.getUser().getId(),
-                order.getMarketCode(),
+                order.getUniversalCode(),
                 currentPrice,
                 quantity,
                 fee,

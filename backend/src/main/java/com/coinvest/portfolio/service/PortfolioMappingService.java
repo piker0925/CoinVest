@@ -51,7 +51,7 @@ public class PortfolioMappingService {
         log.info("Received portfolio update event for ID: {}. Updating Redis mappings.", event.getPortfolioId());
         
         if (event.getType() == PortfolioUpdatedEvent.UpdateType.DELETE) {
-            removeMapping(event.getPortfolioId(), event.getMarketCodes());
+            removeMapping(event.getPortfolioId(), event.getUniversalCodes());
         } else {
             // CREATE, UPDATE의 경우 DB에서 최신 정보를 조회하여 갱신
             portfolioRepository.findById(event.getPortfolioId())
@@ -65,7 +65,7 @@ public class PortfolioMappingService {
     private void updateMapping(Portfolio portfolio) {
         Long portfolioId = portfolio.getId();
         for (PortfolioAsset asset : portfolio.getAssets()) {
-            String key = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, asset.getMarketCode());
+            String key = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, asset.getUniversalCode());
             redisTemplate.opsForSet().add(key, portfolioId);
         }
     }

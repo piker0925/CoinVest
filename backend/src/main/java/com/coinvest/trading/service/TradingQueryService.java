@@ -95,7 +95,7 @@ public class TradingQueryService {
         
         return positions.stream()
                 .map(pos -> {
-                    BigDecimal currentPrice = getCurrentPriceFromRedis(pos.getMarketCode());
+                    BigDecimal currentPrice = getCurrentPriceFromRedis(pos.getUniversalCode());
                     if (currentPrice == null) {
                         // Redis 미스 시 평가를 위해 avgBuyPrice를 폴백으로 사용 (조회용이므로 예외 던지지 않음)
                         currentPrice = pos.getAvgBuyPrice(); 
@@ -114,8 +114,8 @@ public class TradingQueryService {
         return VirtualAccountResponse.of(account, positions, INITIAL_FUND);
     }
 
-    private BigDecimal getCurrentPriceFromRedis(String marketCode) {
-        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, marketCode);
+    private BigDecimal getCurrentPriceFromRedis(String universalCode) {
+        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
         Object priceObj = redisTemplate.opsForValue().get(tickerKey);
         if (priceObj == null) {
             return null;
@@ -123,7 +123,7 @@ public class TradingQueryService {
         try {
             return new BigDecimal(priceObj.toString());
         } catch (NumberFormatException e) {
-            log.error("Invalid price format in Redis for market: {}", marketCode);
+            log.error("Invalid price format in Redis for market: {}", universalCode);
             return null;
         }
     }

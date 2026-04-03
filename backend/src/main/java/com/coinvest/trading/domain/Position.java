@@ -1,6 +1,7 @@
 package com.coinvest.trading.domain;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -14,7 +15,7 @@ import java.math.RoundingMode;
  */
 @Entity
 @Table(name = "positions", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id", "market_code"})
+        @UniqueConstraint(columnNames = {"user_id", "universal_code"})
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -34,8 +35,12 @@ public class Position extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "market_code", nullable = false)
-    private String marketCode;
+    @Column(name = "universal_code", nullable = false, length = 50)
+    private String universalCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Currency currency;
 
     /**
      * 평균 매수 가격.

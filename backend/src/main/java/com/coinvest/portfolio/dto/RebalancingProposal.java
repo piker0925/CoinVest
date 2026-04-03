@@ -15,7 +15,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 public class RebalancingProposal {
-    private String marketCode;
+    private String universalCode;
     private BigDecimal currentWeight;
     private BigDecimal targetWeight;
     private BigDecimal deviation;

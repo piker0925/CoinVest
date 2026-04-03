@@ -17,7 +17,7 @@ public class PortfolioUpdatedEvent {
 
     private Long portfolioId;
     private Long userId;
-    private List<String> marketCodes;
+    private List<String> universalCodes;
 
     /**
      * 업데이트 유형 (CREATE, UPDATE, DELETE).

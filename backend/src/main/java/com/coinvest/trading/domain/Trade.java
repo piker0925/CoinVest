@@ -1,6 +1,7 @@
 package com.coinvest.trading.domain;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,8 +31,15 @@ public class Trade extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "market_code", nullable = false)
-    private String marketCode;
+    @Column(name = "universal_code", nullable = false, length = 50)
+    private String universalCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Currency currency;
+
+    @Column(name = "exchange_rate_snapshot", precision = 20, scale = 6)
+    private BigDecimal exchangeRateSnapshot;
 
     @Column(nullable = false, precision = 20, scale = 4)
     private BigDecimal price;

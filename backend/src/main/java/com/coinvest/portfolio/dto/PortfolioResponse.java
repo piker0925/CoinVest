@@ -30,13 +30,13 @@ public class PortfolioResponse {
     @AllArgsConstructor
     @Builder
     public static class AssetResponse {
-        private String marketCode;
+        private String universalCode;
         private BigDecimal targetWeight;
         private BigDecimal quantity;
 
         public static AssetResponse from(PortfolioAsset asset) {
             return AssetResponse.builder()
-                    .marketCode(asset.getMarketCode())
+                    .universalCode(asset.getUniversalCode())
                     .targetWeight(asset.getTargetWeight())
                     .quantity(asset.getQuantity())
                     .build();

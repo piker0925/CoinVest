@@ -22,10 +22,10 @@ public class PortfolioAsset extends BaseEntity {
     private Long id;
 
     /**
-     * 업비트 마켓 코드 (예: KRW-BTC).
+     * 범용 자산 코드 (예: CRYPTO:BTC).
      */
-    @Column(name = "market_code", nullable = false)
-    private String marketCode;
+    @Column(name = "universal_code", nullable = false, length = 50)
+    private String universalCode;
 
     /**
      * 목표 비중 (0.0 ~ 1.0).

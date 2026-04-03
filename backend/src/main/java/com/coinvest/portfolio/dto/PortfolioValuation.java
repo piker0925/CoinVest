@@ -24,7 +24,7 @@ public class PortfolioValuation {
     @AllArgsConstructor
     @Builder
     public static class AssetValuation {
-        private String marketCode;
+        private String universalCode;
         private BigDecimal currentPrice;
         private BigDecimal quantity;
         private BigDecimal currentEvaluationKrw;

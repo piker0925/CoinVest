@@ -45,13 +45,13 @@ public class MarketSubscriptionService {
      * DB에서 현재 모든 포트폴리오가 보유한 마켓 코드를 중복 없이 추출하여 구독함.
      */
     public void refreshSubscriptions() {
-        List<String> allMarketCodes = portfolioRepository.findAll().stream()
+        List<String> allUniversalCodes = portfolioRepository.findAll().stream()
                 .flatMap(p -> p.getAssets().stream())
-                .map(PortfolioAsset::getMarketCode)
+                .map(PortfolioAsset::getUniversalCode)
                 .distinct()
                 .collect(Collectors.toList());
 
-        log.info("Refreshing Upbit WebSocket subscriptions for {} markets: {}", allMarketCodes.size(), allMarketCodes);
-        webSocketClient.subscribe(allMarketCodes);
+        log.info("Refreshing Upbit WebSocket subscriptions for {} markets: {}", allUniversalCodes.size(), allUniversalCodes);
+        webSocketClient.subscribe(allUniversalCodes);
     }
 }

@@ -34,8 +34,8 @@ public class PortfolioCreateRequest {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AssetRequest {
-        @NotBlank(message = "마켓 코드를 입력해주세요.")
-        private String marketCode;
+        @NotBlank(message = "범용 자산 코드를 입력해주세요.")
+        private String universalCode;
 
         @NotNull(message = "목표 비중을 입력해주세요.")
         @DecimalMin(value = "0.01", message = "비중은 최소 0.01(1%) 이상이어야 합니다.")

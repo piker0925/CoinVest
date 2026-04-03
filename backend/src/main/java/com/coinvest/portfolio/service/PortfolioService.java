@@ -57,7 +57,7 @@ public class PortfolioService {
 
         request.getAssets().forEach(assetReq -> {
             PortfolioAsset asset = PortfolioAsset.builder()
-                    .marketCode(assetReq.getMarketCode())
+                    .universalCode(assetReq.getUniversalCode())
                     .targetWeight(assetReq.getTargetWeight())
                     .quantity(BigDecimal.ZERO) // 초기 수량은 0
                     .build();
@@ -114,7 +114,7 @@ public class PortfolioService {
         portfolio.getAssets().clear();
         request.getAssets().forEach(assetReq -> {
             PortfolioAsset asset = PortfolioAsset.builder()
-                    .marketCode(assetReq.getMarketCode())
+                    .universalCode(assetReq.getUniversalCode())
                     .targetWeight(assetReq.getTargetWeight())
                     .quantity(BigDecimal.ZERO)
                     .build();
@@ -170,14 +170,14 @@ public class PortfolioService {
      * Kafka 이벤트 발행.
      */
     private void publishPortfolioEvent(Portfolio portfolio, PortfolioUpdatedEvent.UpdateType type) {
-        List<String> marketCodes = portfolio.getAssets().stream()
-                .map(PortfolioAsset::getMarketCode)
+        List<String> universalCodes = portfolio.getAssets().stream()
+                .map(PortfolioAsset::getUniversalCode)
                 .collect(Collectors.toList());
 
         PortfolioUpdatedEvent event = new PortfolioUpdatedEvent(
                 portfolio.getId(),
                 portfolio.getUser().getId(),
-                marketCodes,
+                universalCodes,
                 type
         );
 

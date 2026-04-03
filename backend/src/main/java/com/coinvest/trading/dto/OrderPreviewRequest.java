@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
 public record OrderPreviewRequest(
-    @NotBlank String marketCode,
+    @NotBlank String universalCode,
     @NotNull OrderSide side,
     @NotNull OrderType type,
     BigDecimal price,

@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 
 public record OrderResponse(
     Long id,
-    String marketCode,
+    String universalCode,
     OrderSide side,
     OrderType type,
     BigDecimal price,
@@ -22,7 +22,7 @@ public record OrderResponse(
     public static OrderResponse from(Order order) {
         return new OrderResponse(
             order.getId(),
-            order.getMarketCode(),
+            order.getUniversalCode(),
             order.getSide(),
             order.getType(),
             order.getPrice(),

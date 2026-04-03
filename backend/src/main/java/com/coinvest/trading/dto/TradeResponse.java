@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public record TradeResponse(
     Long id,
     Long orderId,
-    String marketCode,
+    String universalCode,
     BigDecimal price,
     BigDecimal quantity,
     BigDecimal fee,
@@ -19,7 +19,7 @@ public record TradeResponse(
         return new TradeResponse(
             trade.getId(),
             trade.getOrder().getId(),
-            trade.getMarketCode(),
+            trade.getUniversalCode(),
             trade.getPrice(),
             trade.getQuantity(),
             trade.getFee(),

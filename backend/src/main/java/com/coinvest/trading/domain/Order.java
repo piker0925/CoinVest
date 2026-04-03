@@ -1,6 +1,8 @@
 package com.coinvest.trading.domain;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.asset.domain.AssetClass;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -31,8 +33,16 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "market_code", nullable = false)
-    private String marketCode;
+    @Column(name = "universal_code", nullable = false, length = 50)
+    private String universalCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Currency currency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "asset_class", nullable = false, length = 20)
+    private AssetClass assetClass;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
