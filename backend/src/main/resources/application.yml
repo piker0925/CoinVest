@@ -18,13 +18,13 @@ spring:
     locations: classpath:db/migration
     enabled: true
 
-trading:
-  bot:
-    enabled: false
-
   threads:
     virtual:
       enabled: true
+
+trading:
+  bot:
+    enabled: false
 
 upbit:
   websocket:

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 public class ValuationConsumer {
 
     private final PortfolioValuationService valuationService;
+    private final RebalancingService rebalancingService;
 
     /**
      * 특정 포트폴리오 ID에 대해 평가 수행.
@@ -28,6 +29,9 @@ public class ValuationConsumer {
         if (log.isTraceEnabled()) {
             log.trace("Received valuation request for portfolio: {}", portfolioId);
         }
-        valuationService.evaluate(portfolioId);
+        com.coinvest.portfolio.dto.PortfolioValuation valuation = valuationService.evaluate(portfolioId);
+        if (valuation != null) {
+            rebalancingService.processAlertTrigger(valuation);
+        }
     }
 }

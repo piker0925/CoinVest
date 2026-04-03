@@ -47,6 +47,25 @@ public class SseEmitters {
     }
 
     /**
+     * 특정 사용자에게 SSE 이벤트 발송.
+     * Kafka 재시도 지옥 방지를 위해 IOException을 내부에서 catch하여 로컬에서 제거 처리함.
+     */
+    public void send(Long userId, String name, Object data) {
+        SseEmitter emitter = emitters.get(userId);
+        if (emitter == null) return;
+
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(name)
+                    .data(data));
+        } catch (IOException e) {
+            log.debug("Failed to send SSE to user {}: {}. Removing emitter.", userId, e.getMessage());
+            emitter.complete();
+            emitters.remove(userId);
+        }
+    }
+
+    /**
      * Nginx 504 Gateway Timeout 방지를 위한 30초 주기 더미 Heartbeat 발송
      */
     @Scheduled(fixedDelay = 30000)
