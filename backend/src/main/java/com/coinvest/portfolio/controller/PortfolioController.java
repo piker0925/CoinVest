@@ -4,7 +4,9 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.global.common.ApiResponse;
 import com.coinvest.portfolio.dto.PortfolioCreateRequest;
 import com.coinvest.portfolio.dto.PortfolioResponse;
+import com.coinvest.portfolio.dto.RebalancingProposal;
 import com.coinvest.portfolio.service.PortfolioService;
+import com.coinvest.portfolio.service.RebalancingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import java.util.List;
 public class PortfolioController {
 
     private final PortfolioService portfolioService;
+    private final RebalancingService rebalancingService;
 
     /**
      * 포트폴리오 생성.
@@ -50,6 +53,16 @@ public class PortfolioController {
             @PathVariable Long id,
             @AuthenticationPrincipal User user) {
         return ApiResponse.success(portfolioService.getPortfolio(id, user));
+    }
+
+    /**
+     * 리밸런싱 시뮬레이션 제안 조회.
+     */
+    @GetMapping("/{id}/rebalancing")
+    public ApiResponse<List<RebalancingProposal>> simulateRebalancing(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User user) {
+        return ApiResponse.success(rebalancingService.simulateRebalancing(id));
     }
 
     /**
