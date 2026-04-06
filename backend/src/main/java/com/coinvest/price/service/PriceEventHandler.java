@@ -3,6 +3,7 @@ package com.coinvest.price.service;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.event.PortfolioValuationEvent;
 import com.coinvest.price.dto.TickerEvent;
+import com.coinvest.price.event.TickerUpdatedEvent;
 import com.coinvest.trading.service.LimitOrderMatchingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,14 +40,17 @@ public class PriceEventHandler implements MessageListener {
             // 1. 최신 가격 저장 (TTL 60초)
             redisTemplate.opsForValue().set(key, event.getTradePrice(), Duration.ofSeconds(60));
 
-            // 2. 지정가 주문 매칭 시도
+            // 2. 내부 리스너들을 위한 가격 업데이트 이벤트 발행
+            eventPublisher.publishEvent(new TickerUpdatedEvent(event));
+
+            // 3. 지정가 주문 매칭 시도
             try {
                 limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice());
             } catch (Exception e) {
                 log.error("Failed to match limit orders for asset: {}", universalCode, e);
             }
 
-            // 3. 해당 자산을 보유한 포트폴리오 ID 목록 조회 후 평가 이벤트 발행
+            // 4. 해당 자산을 보유한 포트폴리오 ID 목록 조회 후 평가 이벤트 발행
             String mappingKey = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, universalCode);
             Set<Object> portfolioIds = redisTemplate.opsForSet().members(mappingKey);
 
