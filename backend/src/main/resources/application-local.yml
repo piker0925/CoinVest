@@ -3,60 +3,19 @@ spring:
     url: jdbc:postgresql://localhost:5432/coinvest
     username: coinvest
     password: password
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: true
-    properties:
-      hibernate:
-        generate_statistics: false # Overhead in free tier
 
   redis:
     host: localhost
     port: 6379
-    timeout: 3000ms
-    lettuce:
-      pool:
-        max-active: 10
-        max-idle: 5
-        min-idle: 2
 
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
       group-id: coinvest-local
-      max-poll-records: 500
-      session-timeout-ms: 30000
-      auto-offset-reset: latest
-      properties:
-        spring.json.trusted.packages: "com.coinvest.*"
-        spring.json.value.default.type: "java.lang.Object"
-    producer:
-      retries: 3
-      acks: all
-      properties:
-        spring.json.add.type.headers: true
 
 jwt:
-  secret: zAt8Wvpx6pY5E2dG9nK3mJ7rQ4u7x!A%D*G-KaPdSgVkYp3s6v9y$B?E(H+MbQeThWmZq4t7w!z%C*F-JaNcRfUjXn2r5u8x/A?D(G+KbPeSgVkYp3s6v9y$B&E)H@Mc
-  access-token-expiration: 1800000 # 30분 (30 * 60 * 1000)
-  refresh-token-expiration: 604800000 # 7일 (7 * 24 * 60 * 60 * 1000)
-
-logging:
-  level:
-    root: INFO
-    com.coinvest: DEBUG
-    org.springframework: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  secret: local_development_secret_key_random_string_at_least_64_chars_long_!!_secure_1234567890
 
 app:
   security:
-    aes-key: "12345678901234567890123456789012" # 32 bytes for AES-256
+    aes-key: "12345678901234567890123456789012"
