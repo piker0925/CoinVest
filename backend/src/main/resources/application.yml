@@ -30,6 +30,20 @@ upbit:
   websocket:
     url: wss://api.upbit.com/websocket/v1
 
+kis:
+  api:
+    base-url: https://openapi.koreainvestment.com:9443
+    app-key: ${KIS_APP_KEY:}
+    app-secret: ${KIS_APP_SECRET:}
+
+yahoo:
+  api:
+    base-url: https://query1.finance.yahoo.com/v7/finance/quote
+
+coinvest:
+  alerts:
+    system-webhook-url: ${SYSTEM_DISCORD_WEBHOOK_URL:}
+
 server:
   port: 8080
   shutdown: graceful
