@@ -8,11 +8,6 @@ spring:
     host: localhost
     port: 6379
 
-  kafka:
-    bootstrap-servers: localhost:9092
-    consumer:
-      group-id: coinvest-local
-
 jwt:
   secret: local_development_secret_key_random_string_at_least_64_chars_long_!!_secure_1234567890
 
