@@ -4,6 +4,7 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
+import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.dto.OrderCreateRequest;
 import com.coinvest.trading.repository.OrderRepository;
@@ -67,6 +68,9 @@ class TradingServiceTest {
     private org.springframework.data.redis.core.ZSetOperations<String, Object> zSetOperations;
 
     @Mock
+    private PriceService priceService;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private User testUser;
@@ -101,7 +105,7 @@ class TradingServiceTest {
         BigDecimal currentPrice = new BigDecimal("100000000"); // 1억
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
-        given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
+        given(priceService.getCurrentPrice(anyString())).willReturn(currentPrice);
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
         
         Position existingPosition = Position.builder()
@@ -133,7 +137,7 @@ class TradingServiceTest {
         BigDecimal currentPrice = new BigDecimal("100000000"); // 1억
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
-        given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
+        given(priceService.getCurrentPrice(anyString())).willReturn(currentPrice);
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
         given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.empty());
 
@@ -168,7 +172,7 @@ class TradingServiceTest {
                 .build();
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
-        given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
+        given(priceService.getCurrentPrice(anyString())).willReturn(currentPrice);
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
         given(positionRepository.findByUserIdAndUniversalCode(userId, marketCode)).willReturn(Optional.of(position));
 
@@ -272,7 +276,7 @@ class TradingServiceTest {
         BigDecimal currentPrice = new BigDecimal("100000000"); // 1억 * 0.00001 = 1000원
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
-        given(valueOperations.get(anyString())).willReturn(currentPrice.toString());
+        given(priceService.getCurrentPrice(anyString())).willReturn(currentPrice);
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(virtualAccount));
 
         // Act & Assert

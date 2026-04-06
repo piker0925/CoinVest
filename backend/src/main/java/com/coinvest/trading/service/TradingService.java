@@ -7,6 +7,7 @@ import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.global.exception.ResourceNotFoundException;
 import com.coinvest.global.util.BigDecimalUtil;
+import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.dto.OrderCreateRequest;
 import com.coinvest.trading.dto.OrderPreviewRequest;
@@ -17,13 +18,11 @@ import com.coinvest.trading.repository.TradeRepository;
 import com.coinvest.trading.dto.TradeEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import com.coinvest.trading.repository.VirtualAccountRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -39,9 +38,10 @@ public class TradingService {
     private final PositionRepository positionRepository;
     private final TradeRepository tradeRepository;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final PriceService priceService;
     private final ApplicationEventPublisher eventPublisher;
 
-    private static final BigDecimal FEE_RATE = new BigDecimal("0.0005"); // 0.05%
+    private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");
     private static final BigDecimal MIN_ORDER_AMOUNT = new BigDecimal("5000");
     private static final String RESET_COOLDOWN_KEY_PREFIX = "account:reset:cooldown:";
     private static final long RESET_COOLDOWN_HOURS = 24;
@@ -66,7 +66,7 @@ public class TradingService {
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TRADING_ORDER_NOT_FOUND));
 
         if (!order.getUser().getId().equals(userId)) {
-            throw new ResourceNotFoundException(ErrorCode.TRADING_ORDER_NOT_FOUND); // IDOR
+            throw new ResourceNotFoundException(ErrorCode.TRADING_ORDER_NOT_FOUND);
         }
 
         if (order.getStatus() != OrderStatus.PENDING) {
@@ -98,12 +98,10 @@ public class TradingService {
     public OrderPreviewResponse previewOrder(OrderPreviewRequest request) {
         BigDecimal price;
         if (request.type() == OrderType.MARKET) {
-            String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, request.universalCode());
-            Object priceObj = redisTemplate.opsForValue().get(tickerKey);
-            if (priceObj == null) {
-                throw new BusinessException(ErrorCode.COMMON_INTERNAL_ERROR); // 시세 조회 실패
+            price = priceService.getCurrentPrice(request.universalCode());
+            if (price.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException(ErrorCode.COMMON_INTERNAL_ERROR);
             }
-            price = new BigDecimal(priceObj.toString());
         } else {
             if (request.price() == null || request.price().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new BusinessException(ErrorCode.TRADING_INVALID_ORDER_PRICE);
@@ -131,26 +129,24 @@ public class TradingService {
         }
 
         try {
-            // 1. Cancel all PENDING orders
             List<Order> pendingOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PENDING);
             for (Order order : pendingOrders) {
                 cancelOrder(userId, order.getId());
             }
 
-            // 2. Sell all positions at market price
             List<Position> positions = positionRepository.findByUserId(userId);
-            RestTemplate restTemplate = new RestTemplate();
-
             for (Position position : positions) {
                 if (position.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
                     continue;
                 }
                 
-                BigDecimal currentPrice = getCurrentPriceWithFallback(position, restTemplate);
+                BigDecimal currentPrice = priceService.getCurrentPrice(position.getUniversalCode());
+                if (currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                    currentPrice = position.getAvgBuyPrice(); // Last fallback
+                }
                 executeMarketSell(position.getUser(), position.getUniversalCode(), currentPrice, position.getQuantity(), true);
             }
 
-            // 3. Reset balance to INITIAL_FUND
             VirtualAccount account = virtualAccountRepository.findByUserId(userId)
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
             
@@ -165,34 +161,10 @@ public class TradingService {
                 account.decreaseBalance(account.getBalanceKrw().subtract(initialFund));
             }
         } catch (Exception e) {
-            // 보상 로직: 예외 발생 시 쿨다운 키를 즉시 삭제하여 유저가 갇히는 현상 방지
             redisTemplate.delete(cooldownKey);
             log.error("Failed to reset account for user {}, cooldown key deleted.", userId, e);
-            throw e; // Exception Swallowing 방지 (정상적인 DB 롤백 유도)
+            throw e;
         }
-    }
-
-    private BigDecimal getCurrentPriceWithFallback(Position position, RestTemplate restTemplate) {
-        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, position.getUniversalCode());
-        Object priceObj = redisTemplate.opsForValue().get(tickerKey);
-        if (priceObj != null) {
-            try {
-                return new BigDecimal(priceObj.toString());
-            } catch (NumberFormatException ignored) {}
-        }
-        
-        try {
-            String url = "https://api.upbit.com/v1/ticker?markets=" + position.getUniversalCode();
-            JsonNode[] response = restTemplate.getForObject(url, JsonNode[].class);
-            if (response != null && response.length > 0) {
-                return new BigDecimal(response[0].get("trade_price").asText());
-            }
-        } catch (Exception e) {
-            log.warn("Upbit REST API fallback failed for market: {}", position.getUniversalCode(), e);
-        }
-
-        log.warn("Using avgBuyPrice as fallback for market: {}", position.getUniversalCode());
-        return position.getAvgBuyPrice();
     }
 
     private Long processLimitOrder(User user, OrderCreateRequest request) {
@@ -224,11 +196,10 @@ public class TradingService {
             account.lockBalance(requiredKrw);
             order = orderRepository.save(order);
             
-            // Redis ZSet에 지정가 매수 주문 등록 (score = price)
             String redisKey = "trading:limit-order:buy:" + request.universalCode();
             redisTemplate.opsForZSet().add(redisKey, order.getId().toString(), price.doubleValue());
             
-        } else { // SELL
+        } else {
             Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), request.universalCode())
                     .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_QUANTITY));
             
@@ -240,7 +211,6 @@ public class TradingService {
             position.lockQuantity(quantity);
             order = orderRepository.save(order);
             
-            // Redis ZSet에 지정가 매도 주문 등록 (score = price)
             String redisKey = "trading:limit-order:sell:" + request.universalCode();
             redisTemplate.opsForZSet().add(redisKey, order.getId().toString(), price.doubleValue());
         }
@@ -250,7 +220,7 @@ public class TradingService {
 
     private void validateOrderRequest(OrderCreateRequest request) {
         if (request.type() == OrderType.MARKET && request.price() != null) {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT); // 가격 없어야 함
+            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
         }
         if (request.type() == OrderType.LIMIT && (request.price() == null || request.price().compareTo(BigDecimal.ZERO) <= 0)) {
             throw new BusinessException(ErrorCode.TRADING_INVALID_ORDER_PRICE);
@@ -258,14 +228,12 @@ public class TradingService {
     }
 
     private Long processMarketOrder(User user, OrderCreateRequest request) {
-        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, request.universalCode());
-        Object priceObj = redisTemplate.opsForValue().get(tickerKey);
+        BigDecimal currentPrice = priceService.getCurrentPrice(request.universalCode());
         
-        if (priceObj == null) {
-            throw new BusinessException(ErrorCode.COMMON_INTERNAL_ERROR); // 시세 조회 실패
+        if (currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ErrorCode.COMMON_INTERNAL_ERROR);
         }
         
-        BigDecimal currentPrice = new BigDecimal(priceObj.toString());
         BigDecimal quantity = BigDecimalUtil.formatCoin(request.quantity());
 
         if (request.side() == OrderSide.BUY) {
@@ -275,61 +243,60 @@ public class TradingService {
         }
     }
 
-    private Long executeMarketBuy(User user, String marketCode, BigDecimal currentPrice, BigDecimal quantity) {
+    private Long executeMarketBuy(User user, String universalCode, BigDecimal currentPrice, BigDecimal quantity) {
         VirtualAccount account = virtualAccountRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND)); // 추후 가상계좌 없음 예외로 변경
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
 
         BigDecimal totalAmount = currentPrice.multiply(quantity);
         BigDecimal fee = BigDecimalUtil.formatKrw(totalAmount.multiply(FEE_RATE));
         BigDecimal requiredKrw = BigDecimalUtil.formatKrw(totalAmount.add(fee));
 
         if (requiredKrw.compareTo(MIN_ORDER_AMOUNT) < 0) {
-            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT); // 최소 주문 금액 미달
+            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
         }
 
         account.decreaseBalance(requiredKrw);
 
         Order order = Order.builder()
                 .user(user)
-                .universalCode(marketCode)
+                .universalCode(universalCode)
                 .side(OrderSide.BUY)
                 .type(OrderType.MARKET)
                 .price(null)
                 .quantity(quantity)
                 .status(OrderStatus.FILLED)
                 .build();
-        order.fill(); // status 및 filledAt 갱신
+        order.fill();
         order = orderRepository.save(order);
 
-        Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), marketCode)
+        Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), universalCode)
                 .orElseGet(() -> Position.builder()
                         .user(user)
-                        .universalCode(marketCode)
+                        .universalCode(universalCode)
                         .avgBuyPrice(BigDecimal.ZERO)
                         .quantity(BigDecimal.ZERO)
                         .realizedPnl(BigDecimal.ZERO)
                         .build());
         
         position.addPosition(currentPrice, quantity);
-        position = positionRepository.save(position);
+        positionRepository.save(position);
 
         Trade trade = Trade.builder()
                 .order(order)
                 .user(user)
-                .universalCode(marketCode)
+                .universalCode(universalCode)
                 .price(currentPrice)
                 .quantity(quantity)
                 .fee(fee)
-                .realizedPnl(BigDecimal.ZERO) // 매수 시 실현 손익 0
+                .realizedPnl(BigDecimal.ZERO)
                 .build();
         trade = tradeRepository.save(trade);
 
-        // Publish event
         eventPublisher.publishEvent(new TradeEvent(
                 trade.getId(),
                 order.getId(),
                 user.getId(),
-                marketCode,
+                universalCode,
                 currentPrice,
                 quantity,
                 fee,
@@ -340,15 +307,15 @@ public class TradingService {
         return order.getId();
     }
 
-    private Long executeMarketSell(User user, String marketCode, BigDecimal currentPrice, BigDecimal quantity) {
-        return executeMarketSell(user, marketCode, currentPrice, quantity, false);
+    private Long executeMarketSell(User user, String universalCode, BigDecimal currentPrice, BigDecimal quantity) {
+        return executeMarketSell(user, universalCode, currentPrice, quantity, false);
     }
 
-    private Long executeMarketSell(User user, String marketCode, BigDecimal currentPrice, BigDecimal quantity, boolean isReset) {
+    private Long executeMarketSell(User user, String universalCode, BigDecimal currentPrice, BigDecimal quantity, boolean isReset) {
         VirtualAccount account = virtualAccountRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
 
-        Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), marketCode)
+        Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), universalCode)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_QUANTITY));
 
         BigDecimal totalAmount = currentPrice.multiply(quantity);
@@ -356,18 +323,17 @@ public class TradingService {
         BigDecimal expectedReturn = BigDecimalUtil.formatKrw(totalAmount.subtract(fee));
 
         if (!isReset && totalAmount.compareTo(MIN_ORDER_AMOUNT) < 0) {
-             throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT); // 최소 주문 금액 미달
+             throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
         }
 
-        // 실현 손익 계산 전 현재 평단가 기록
         BigDecimal realizedPnl = currentPrice.subtract(position.getAvgBuyPrice()).multiply(quantity);
 
-        position.subtractPosition(currentPrice, quantity); // 수량 검증 포함됨
+        position.subtractPosition(currentPrice, quantity);
         account.increaseBalance(expectedReturn);
 
         Order order = Order.builder()
                 .user(user)
-                .universalCode(marketCode)
+                .universalCode(universalCode)
                 .side(OrderSide.SELL)
                 .type(OrderType.MARKET)
                 .price(null)
@@ -380,7 +346,7 @@ public class TradingService {
         Trade trade = Trade.builder()
                 .order(order)
                 .user(user)
-                .universalCode(marketCode)
+                .universalCode(universalCode)
                 .price(currentPrice)
                 .quantity(quantity)
                 .fee(fee)

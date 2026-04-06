@@ -13,8 +13,8 @@ CREATE TABLE alert_settings (
 -- 알림 이력 테이블
 CREATE TABLE alert_histories (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    portfolio_id BIGINT NOT NULL,
+    user_id BIGINT,
+    portfolio_id BIGINT,
     message TEXT NOT NULL,
     type VARCHAR(30) NOT NULL,
     status VARCHAR(20) NOT NULL,

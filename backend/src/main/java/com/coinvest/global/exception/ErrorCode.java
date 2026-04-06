@@ -25,6 +25,7 @@ public enum ErrorCode {
 	TRADING_INVALID_ORDER_PRICE("지정가 주문 시 가격은 필수이며 0보다 커야 합니다", HttpStatus.BAD_REQUEST),
 	TRADING_ORDER_NOT_FOUND("주문을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 	TRADING_ORDER_NOT_CANCELABLE("취소 가능한 상태의 주문이 아닙니다", HttpStatus.BAD_REQUEST),
+	EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED("최근 환율 정보가 유효하지 않아 USD 거래가 일시 중단되었습니다", HttpStatus.BAD_REQUEST),
 
 	// 409 Conflict (데이터 충돌)
 	AUTH_EMAIL_DUPLICATE("이미 사용 중인 이메일입니다", HttpStatus.CONFLICT),

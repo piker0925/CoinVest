@@ -1,5 +1,7 @@
 package com.coinvest.price.dto;
 
+import com.coinvest.asset.domain.AssetClass;
+import com.coinvest.fx.domain.Currency;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +11,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 /**
- * Upbit WebSocket Ticker 메시지 매핑 DTO.
+ * 자산 가격 변동 이벤트 DTO.
  */
 @Getter
 @NoArgsConstructor
@@ -17,8 +19,13 @@ import java.math.BigDecimal;
 @Builder
 public class TickerEvent {
 
+    private String universalCode; // 표준 코드 (예: CRYPTO:BTC)
+    private AssetClass assetClass; // 자산 분류
+    private Currency quoteCurrency; // 거래 통화
+
+    @Deprecated
     @JsonProperty("cd")
-    private String marketCode; // 마켓 코드 (예: KRW-BTC)
+    private String marketCode; // 마켓 코드 (레거시 호환용)
 
     @JsonProperty("tp")
     private BigDecimal tradePrice; // 현재가

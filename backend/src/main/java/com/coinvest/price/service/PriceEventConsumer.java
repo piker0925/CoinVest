@@ -33,21 +33,21 @@ public class PriceEventConsumer {
             concurrency = "3"
     )
     public void onTickerUpdated(TickerEvent event) {
-        String marketCode = event.getMarketCode();
-        String key = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, marketCode);
+        String universalCode = event.getUniversalCode();
+        String key = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
         
         // 1. 최신 가격 저장 (TTL 60초)
         redisTemplate.opsForValue().set(key, event.getTradePrice(), Duration.ofSeconds(60));
         
         // 2. 지정가 주문 매칭 시도
         try {
-            limitOrderMatchingService.matchOrders(marketCode, event.getTradePrice());
+            limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice());
         } catch (Exception e) {
-            log.error("Failed to match limit orders for market: {}", marketCode, e);
+            log.error("Failed to match limit orders for asset: {}", universalCode, e);
         }
         
-        // 3. 해당 마켓을 보유한 포트폴리오 ID 목록 조회
-        String mappingKey = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, marketCode);
+        // 3. 해당 자산을 보유한 포트폴리오 ID 목록 조회
+        String mappingKey = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, universalCode);
         java.util.Set<Object> portfolioIds = redisTemplate.opsForSet().members(mappingKey);
 
         if (portfolioIds != null && !portfolioIds.isEmpty()) {
@@ -59,7 +59,7 @@ public class PriceEventConsumer {
         }
         
         if (log.isTraceEnabled()) {
-            log.trace("Updated Redis price cache: {} = {}", event.getMarketCode(), event.getTradePrice());
+            log.trace("Updated Redis price cache: {} = {}", universalCode, event.getTradePrice());
         }
     }
 }

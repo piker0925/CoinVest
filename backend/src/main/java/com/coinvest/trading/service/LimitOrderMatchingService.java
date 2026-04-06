@@ -1,8 +1,6 @@
 package com.coinvest.trading.service;
 
 import com.coinvest.trading.domain.Order;
-import com.coinvest.trading.domain.OrderSide;
-import com.coinvest.trading.domain.OrderStatus;
 import com.coinvest.trading.domain.Position;
 import com.coinvest.trading.domain.Trade;
 import com.coinvest.trading.domain.VirtualAccount;
@@ -38,16 +36,15 @@ public class LimitOrderMatchingService {
 
     /**
      * Ticker 수신 시 호출되어 조건에 맞는 지정가 주문을 찾아 체결을 시도함.
-     * 이 메서드 자체는 @Transactional을 붙이지 않아 I/O 작업을 트랜잭션에서 분리함.
      */
-    public void matchOrders(String marketCode, BigDecimal currentPrice) {
-        matchBuyOrders(marketCode, currentPrice);
-        matchSellOrders(marketCode, currentPrice);
+    public void matchOrders(String universalCode, BigDecimal currentPrice) {
+        matchBuyOrders(universalCode, currentPrice);
+        matchSellOrders(universalCode, currentPrice);
     }
 
-    private void matchBuyOrders(String marketCode, BigDecimal currentPrice) {
-        String key = "trading:limit-order:buy:" + marketCode;
-        // 매수: 현재가보다 높거나 같은 지정가 주문을 찾음 (역순 조회: 높은 가격부터)
+    private void matchBuyOrders(String universalCode, BigDecimal currentPrice) {
+        String key = "trading:limit-order:buy:" + universalCode;
+        // 매수: 현재가보다 높거나 같은 지정가 주문을 찾음
         Set<Object> matchingOrderIds = redisTemplate.opsForZSet().reverseRangeByScore(key, currentPrice.doubleValue(), Double.MAX_VALUE);
         
         if (matchingOrderIds == null || matchingOrderIds.isEmpty()) return;
@@ -90,31 +87,27 @@ public class LimitOrderMatchingService {
      */
     @Transactional
     public boolean executeBuyOrderInTransaction(Long orderId, BigDecimal currentPrice) {
-        // 조건부 업데이트: PENDING 상태일 때만 FILLED로 변경 (낙관적/비관적 락 대체)
         int updated = orderRepository.updateStatusToFilledIfPending(orderId);
         if (updated == 0) {
-            return true; // 이미 처리됨. Redis에서 지우기 위해 true 반환(Self-healing).
+            return true; // Self-healing
         }
 
         Order order = orderRepository.findById(orderId).orElseThrow();
         VirtualAccount account = virtualAccountRepository.findByUserId(order.getUser().getId()).orElseThrow();
         
         BigDecimal quantity = order.getQuantity();
-        BigDecimal orderPrice = order.getPrice(); // 원래 잠겼던 주문 가격 (보통 현재가보다 비싸거나 같음)
+        BigDecimal orderPrice = order.getPrice();
         
-        // 1. 잠금 해제 (원래 주문가 기준으로 잠겼던 금액)
         BigDecimal lockedTotalAmount = orderPrice.multiply(quantity);
         BigDecimal lockedFee = BigDecimalUtil.formatKrw(lockedTotalAmount.multiply(FEE_RATE));
         BigDecimal lockedKrw = BigDecimalUtil.formatKrw(lockedTotalAmount.add(lockedFee));
         account.unlockBalance(lockedKrw);
 
-        // 2. 실제 체결 (현재가 기준) 및 잔고 차감
         BigDecimal actualTotalAmount = currentPrice.multiply(quantity);
         BigDecimal actualFee = BigDecimalUtil.formatKrw(actualTotalAmount.multiply(FEE_RATE));
         BigDecimal actualKrw = BigDecimalUtil.formatKrw(actualTotalAmount.add(actualFee));
         account.decreaseBalance(actualKrw);
 
-        // 3. 포지션 갱신
         Position position = positionRepository.findByUserIdAndUniversalCode(order.getUser().getId(), order.getUniversalCode())
                 .orElseGet(() -> Position.builder()
                         .user(order.getUser())
@@ -126,7 +119,6 @@ public class LimitOrderMatchingService {
         position.addPosition(currentPrice, quantity);
         positionRepository.save(position);
 
-        // 4. Trade 기록
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
@@ -169,10 +161,8 @@ public class LimitOrderMatchingService {
 
         BigDecimal quantity = order.getQuantity();
 
-        // 1. 수량 잠금 해제 (매도는 수량 자체가 잠김)
         position.unlockQuantity(quantity);
 
-        // 2. 체결 및 잔고 증가 (현재가 기준)
         BigDecimal totalAmount = currentPrice.multiply(quantity);
         BigDecimal fee = BigDecimalUtil.formatKrw(totalAmount.multiply(FEE_RATE));
         BigDecimal expectedReturn = BigDecimalUtil.formatKrw(totalAmount.subtract(fee));
@@ -182,7 +172,6 @@ public class LimitOrderMatchingService {
         position.subtractPosition(currentPrice, quantity);
         account.increaseBalance(expectedReturn);
 
-        // 3. Trade 기록
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
