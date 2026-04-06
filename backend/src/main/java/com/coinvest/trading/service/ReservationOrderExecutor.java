@@ -11,6 +11,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Component
@@ -23,36 +25,39 @@ public class ReservationOrderExecutor {
     private final TradingService tradingService;
 
     /**
-     * 1분마다 예약 주문 확인 및 실행
+     * 1분마다 예약 주문 확인 및 병렬 실행.
+     * 장 개시 시 Thundering Herd 문제를 방어하기 위해 Virtual Threads 사용.
      */
     @Scheduled(fixedRate = 60000)
     public void executeReservedOrders() {
+        // PENDING 상태인 예약 주문 조회
         List<Order> reservedOrders = orderRepository.findAllByReservationAndStatus(true, OrderStatus.PENDING);
 
         if (reservedOrders.isEmpty()) {
             return;
         }
 
-        log.info("Checking {} reserved orders...", reservedOrders.size());
+        log.info("Starting execution for {} reserved orders using Virtual Threads...", reservedOrders.size());
 
-        for (Order order : reservedOrders) {
-            Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode()).orElse(null);
-            if (asset != null && marketHoursService.isMarketOpen(asset)) {
-                try {
-                    // 예약 주문 실행 (TradingService 내부에 별도 실행 로직 필요할 수 있음)
-                    // 현재는 단순화를 위해 로그 출력 후 처리 로직 위임 구조만 생성
-                    log.info("Market opened for reserved order ID: {}. Triggering execution...", order.getId());
-                    processReservedOrder(order);
-                } catch (Exception e) {
-                    log.error("Failed to execute reserved order ID: {}", order.getId(), e);
-                }
+        // Java 21 Virtual Threads 활용 (경량 스레드로 수만 건도 동시 처리 가능)
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (Order order : reservedOrders) {
+                executor.submit(() -> processSingleOrder(order));
             }
+        } catch (Exception e) {
+            log.error("Critical error during reserved orders parallel execution", e);
         }
     }
 
-    private void processReservedOrder(Order order) {
-        // 예약 주문 실행 시 TradingService의 전용 로직 호출
-        tradingService.processReservedOrder(order.getId());
-        log.info("Successfully triggered execution for reserved order: {}", order.getId());
+    private void processSingleOrder(Order order) {
+        try {
+            Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode()).orElse(null);
+            if (asset != null && marketHoursService.isMarketOpen(asset)) {
+                log.debug("Market opened for reserved order ID: {}. Processing...", order.getId());
+                tradingService.processReservedOrder(order.getId());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process reserved order ID: {}", order.getId(), e);
+        }
     }
 }
