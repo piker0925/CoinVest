@@ -6,5 +6,8 @@ public record OrderPreviewResponse(
     BigDecimal expectedPrice,
     BigDecimal expectedQuantity,
     BigDecimal expectedFee,
-    BigDecimal expectedTotalAmount
+    BigDecimal expectedTotalAmount,
+    boolean isReservation,
+    BigDecimal estimatedExchangeAmount,
+    String exchangeCurrency
 ) {}
