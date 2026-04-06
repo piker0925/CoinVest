@@ -54,23 +54,43 @@ public class Balance extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
-    public void withdraw(BigDecimal amount) {
+    public void decreaseAvailable(BigDecimal amount) {
         if (available.compareTo(amount) < 0) {
             throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
         }
         this.available = this.available.subtract(amount);
     }
 
-    public void deposit(BigDecimal amount) {
+    public void increaseAvailable(BigDecimal amount) {
         this.available = this.available.add(amount);
     }
 
+    public void increaseUnsettled(BigDecimal amount) {
+        this.unsettled = this.unsettled.add(amount);
+    }
+
+    public void withdraw(BigDecimal amount) {
+        decreaseAvailable(amount);
+    }
+
+    public void deposit(BigDecimal amount) {
+        increaseAvailable(amount);
+    }
+
     public void lock(BigDecimal amount) {
-        if (available.compareTo(amount) < 0) {
-            throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
+        // available에서 부족하면 unsettled에서 가져옴 (통합증거금 및 재투자 로직 대응)
+        if (available.compareTo(amount) >= 0) {
+            this.available = this.available.subtract(amount);
+            this.locked = this.locked.add(amount);
+        } else {
+            BigDecimal shortage = amount.subtract(available);
+            if (unsettled.compareTo(shortage) < 0) {
+                throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
+            }
+            this.locked = this.locked.add(amount);
+            this.unsettled = this.unsettled.subtract(shortage);
+            this.available = BigDecimal.ZERO;
         }
-        this.available = this.available.subtract(amount);
-        this.locked = this.locked.add(amount);
     }
 
     public void unlock(BigDecimal amount) {
@@ -79,7 +99,7 @@ public class Balance extends BaseEntity {
     }
 
     public void addUnsettled(BigDecimal amount) {
-        this.unsettled = this.unsettled.add(amount);
+        increaseUnsettled(amount);
     }
 
     public void settle(BigDecimal amount) {

@@ -52,4 +52,7 @@ public class Trade extends BaseEntity {
 
     @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
     private BigDecimal realizedPnl;
+
+    @Column(nullable = false)
+    private java.time.LocalDate settlementDate;
 }

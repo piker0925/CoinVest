@@ -68,11 +68,24 @@ public class Order extends BaseEntity {
     @Column(nullable = false)
     private OrderStatus status;
 
+    @Column(nullable = false)
+    private boolean reservation;
+
+    @Column(name = "reservation_triggered_at")
+    private LocalDateTime reservationTriggeredAt;
+
     /**
      * 체결 시각.
      */
     @Column(name = "filled_at")
     private LocalDateTime filledAt;
+
+    /**
+     * 예약 주문 실행 처리.
+     */
+    public void triggerReservation() {
+        this.reservationTriggeredAt = LocalDateTime.now();
+    }
 
     /**
      * 주문 체결 처리.
