@@ -25,6 +25,9 @@ public class Asset extends BaseEntity {
     @Column(nullable = false, length = 50)
     private String externalCode;
 
+    @Column(length = 20)
+    private String exchangeCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AssetClass assetClass;

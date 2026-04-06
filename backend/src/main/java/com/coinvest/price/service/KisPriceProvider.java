@@ -41,11 +41,13 @@ public class KisPriceProvider implements PriceProvider {
     private final Sleeper sleeper;
 
     private static final int MAX_RETRIES = 3;
-    private static final String TR_ID_STOCK_PRICE = "FHKST01010100";
+    private static final String TR_ID_DOMESTIC_PRICE = "FHKST01010100";
+    private static final String TR_ID_OVERSEAS_PRICE = "HHDFS00000300"; // 해외주식 실시간지연시세
 
     @Override
     public boolean supports(AssetClass assetClass) {
-        return assetClass == AssetClass.KR_STOCK || assetClass == AssetClass.KR_ETF;
+        return assetClass == AssetClass.KR_STOCK || assetClass == AssetClass.KR_ETF ||
+                assetClass == AssetClass.US_STOCK || assetClass == AssetClass.US_ETF;
     }
 
     @Override
@@ -90,7 +92,7 @@ public class KisPriceProvider implements PriceProvider {
     }
 
     private TickerEvent fetchSinglePrice(Asset asset, String token) {
-        // Thundering Herd 방어용 초기 Jitter (2초 분산하여 10 TPS 달성)
+        // Thundering Herd 방어용 초기 Jitter
         try {
             long jitter = ThreadLocalRandom.current().nextLong(2000);
             sleeper.sleep(jitter);
@@ -99,15 +101,28 @@ public class KisPriceProvider implements PriceProvider {
             return null;
         }
 
-        String uriStr = String.format("%s/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=%s",
-                kisApiManager.getBaseUrl(), asset.getExternalCode());
+        boolean isDomestic = asset.getAssetClass() == AssetClass.KR_STOCK || asset.getAssetClass() == AssetClass.KR_ETF;
+        String uriStr;
+        String trId;
+
+        if (isDomestic) {
+            uriStr = String.format("%s/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=%s",
+                    kisApiManager.getBaseUrl(), asset.getExternalCode());
+            trId = TR_ID_DOMESTIC_PRICE;
+        } else {
+            // 해외주식: EXCD(거래소코드), SYMB(종목코드) 사용
+            String exchangeCode = asset.getExchangeCode() != null ? asset.getExchangeCode() : "NAS"; // Default to NAS
+            uriStr = String.format("%s/uapi/overseas-price/v1/quotations/price?AUTH=&EXCD=%s&SYMB=%s",
+                    kisApiManager.getBaseUrl(), exchangeCode, asset.getExternalCode());
+            trId = TR_ID_OVERSEAS_PRICE;
+        }
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(uriStr))
                 .header("authorization", "Bearer " + token)
                 .header("appkey", kisApiManager.getAppKey())
                 .header("appsecret", kisApiManager.getAppSecret())
-                .header("tr_id", TR_ID_STOCK_PRICE)
+                .header("tr_id", trId)
                 .timeout(Duration.ofSeconds(10))
                 .GET()
                 .build();
@@ -152,11 +167,14 @@ public class KisPriceProvider implements PriceProvider {
             JsonNode output = root.path("output");
             if (output.isMissingNode() || output.isNull()) return null;
 
+            boolean isDomestic = asset.getAssetClass() == AssetClass.KR_STOCK || asset.getAssetClass() == AssetClass.KR_ETF;
+            String priceField = isDomestic ? "stck_prpr" : "last";
+
             return TickerEvent.builder()
                     .universalCode(asset.getUniversalCode())
                     .assetClass(asset.getAssetClass())
                     .quoteCurrency(asset.getQuoteCurrency())
-                    .tradePrice(new BigDecimal(output.path("stck_prpr").asText()))
+                    .tradePrice(new BigDecimal(output.path(priceField).asText()))
                     .timestamp(System.currentTimeMillis())
                     .build();
         } catch (IOException e) {

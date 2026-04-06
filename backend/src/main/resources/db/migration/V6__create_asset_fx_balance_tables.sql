@@ -4,6 +4,7 @@ CREATE TABLE assets (
     id BIGSERIAL PRIMARY KEY,
     universal_code VARCHAR(50) NOT NULL UNIQUE,
     external_code VARCHAR(50) NOT NULL,
+    exchange_code VARCHAR(20),
     asset_class VARCHAR(20) NOT NULL,
     quote_currency VARCHAR(10) NOT NULL,
     name VARCHAR(100) NOT NULL,
