@@ -23,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
@@ -49,25 +48,26 @@ public class TradingService {
     private final MarketHoursService marketHoursService;
     private final ApplicationEventPublisher eventPublisher;
 
+    private final OrderValidator orderValidator;
+    private final MarginCalculator marginCalculator;
+
     private static final BigDecimal MIN_ORDER_AMOUNT_KRW = new BigDecimal("5000");
     private static final BigDecimal MIN_ORDER_AMOUNT_USD = new BigDecimal("5");
 
     @Transactional
     public Long createOrder(Long userId, OrderCreateRequest request) {
-        validateOrderRequest(request);
+        orderValidator.validateRequest(request);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
         
         Asset asset = assetRepository.findByUniversalCode(request.universalCode())
-                .orElseThrow(() -> new BusinessException(ErrorCode.COMMON_INVALID_INPUT));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_ASSET_NOT_FOUND));
 
-        // 1. 가격 및 장 상태 사전 확인 (락 획득 전)
         BigDecimal currentPrice = getCurrentPrice(request, asset);
         boolean isMarketOpen = marketHoursService.isMarketOpen(asset);
         boolean isReservation = !isMarketOpen;
 
-        // 2. 통합 증거금 계산 및 잔고 락 (PESSIMISTIC_WRITE)
         List<Currency> currenciesToLock = Stream.of(Currency.KRW, Currency.USD)
                 .sorted(Comparator.comparingInt(Enum::ordinal))
                 .collect(Collectors.toList());
@@ -84,16 +84,18 @@ public class TradingService {
         BigDecimal fee = totalAmount.multiply(asset.getFeeRate());
         BigDecimal requiredAmount = totalAmount.add(fee);
 
-        validateMinOrderAmount(asset.getQuoteCurrency(), requiredAmount);
+        orderValidator.validateMinOrderAmount(asset.getQuoteCurrency(), requiredAmount);
 
-        BigDecimal exchangeRateSnapshot = BigDecimal.ONE;
+        BigDecimal fxRate = BigDecimal.ONE;
         if (request.side() == OrderSide.BUY) {
-            exchangeRateSnapshot = handleIntegratedMarginBuy(assetBalance, otherBalance, requiredAmount, asset.getQuoteCurrency());
+            fxRate = marginCalculator.calculateAndApplyMargin(assetBalance, otherBalance, requiredAmount);
         } else {
-            handleSellPositionLock(user, asset, quantity);
+            Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), asset.getUniversalCode())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_QUANTITY));
+            orderValidator.validateSellPosition(position, quantity);
+            position.lockQuantity(quantity);
         }
 
-        // 3. 주문 생성
         Order order = Order.builder()
                 .user(user)
                 .universalCode(asset.getUniversalCode())
@@ -112,9 +114,8 @@ public class TradingService {
         }
         order = orderRepository.save(order);
 
-        // 4. 즉시 체결 처리
         if (!isReservation && request.type() == OrderType.MARKET) {
-            executeTrade(order, currentPrice, assetBalance, otherBalance, exchangeRateSnapshot);
+            executeTrade(order, currentPrice, assetBalance, otherBalance, fxRate);
         } else if (request.type() == OrderType.LIMIT) {
             registerLimitOrder(order);
         }
@@ -122,9 +123,25 @@ public class TradingService {
         return order.getId();
     }
 
-    /**
-     * 예약 주문 실제 실행 (ReservationOrderExecutor에서 호출)
-     */
+    @Transactional
+    public void requestWithdrawal(Long userId, Currency currency, BigDecimal amount) {
+        VirtualAccount account = virtualAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
+        
+        Balance balance = balanceRepository.findByAccountIdAndCurrencyWithLock(account.getId(), currency)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_BALANCE_NOT_FOUND));
+
+        if (balance.getAvailable().compareTo(amount) < 0) {
+            if (balance.getAvailableForPurchase().compareTo(amount) >= 0) {
+                throw new BusinessException(ErrorCode.WITHDRAWAL_RESTRICTION);
+            }
+            throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
+        }
+
+        balance.decreaseAvailable(amount);
+        log.info("Withdrawal processed: [User={}, Amount={} {}]", userId, amount, currency);
+    }
+
     @Transactional
     public void processReservedOrder(Long orderId) {
         Order order = orderRepository.findById(orderId).orElseThrow();
@@ -144,7 +161,6 @@ public class TradingService {
         Balance assetBalance = getBalance(balances, order.getCurrency());
         Balance otherBalance = getBalance(balances, order.getCurrency() == Currency.KRW ? Currency.USD : Currency.KRW);
 
-        // 예약 주문은 시장가로 체결
         order.triggerReservation();
         order.fill();
         executeTrade(order, currentPrice, assetBalance, otherBalance, exchangeRateService.getCurrentExchangeRate(Currency.USD, Currency.KRW));
@@ -152,7 +168,7 @@ public class TradingService {
 
     public OrderPreviewResponse previewOrder(OrderPreviewRequest request) {
         Asset asset = assetRepository.findByUniversalCode(request.universalCode())
-                .orElseThrow(() -> new BusinessException(ErrorCode.COMMON_INVALID_INPUT));
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_ASSET_NOT_FOUND));
 
         BigDecimal price = request.type() == OrderType.MARKET ? 
                 priceService.getCurrentPrice(request.universalCode()) : request.price();
@@ -162,50 +178,23 @@ public class TradingService {
         BigDecimal fee = totalAmount.multiply(asset.getFeeRate());
         BigDecimal requiredAmount = totalAmount.add(fee);
 
-        // 통합 증거금 예상액 계산 (로그인 유저 기준이면 더 정확하나 여기선 일반 로직)
         boolean isReservation = !marketHoursService.isMarketOpen(asset);
         
         return new OrderPreviewResponse(
                 price, quantity, fee, requiredAmount,
-                isReservation, BigDecimal.ZERO, null // 상세 환전 정보는 유저 잔고 연동 필요
+                isReservation, BigDecimal.ZERO, null
         );
-    }
-
-    private BigDecimal handleIntegratedMarginBuy(Balance assetBalance, Balance otherBalance, BigDecimal requiredAmount, Currency quoteCurrency) {
-        BigDecimal availableTotal = assetBalance.getAvailableForPurchase();
-        BigDecimal fxRate = exchangeRateService.getCurrentExchangeRate(Currency.USD, Currency.KRW);
-
-        if (availableTotal.compareTo(requiredAmount) < 0) {
-            BigDecimal shortage = requiredAmount.subtract(availableTotal);
-            BigDecimal requiredOtherCurrency = (quoteCurrency == Currency.USD) ?
-                    shortage.multiply(fxRate).setScale(0, RoundingMode.UP) :
-                    shortage.divide(fxRate, 2, RoundingMode.UP);
-
-            otherBalance.decreaseAvailable(requiredOtherCurrency);
-            assetBalance.increaseAvailable(shortage);
-            
-            log.info("Integrated Margin Used: Converted {} {} to {} {}", requiredOtherCurrency, otherBalance.getCurrency(), shortage, quoteCurrency);
-        }
-        
-        assetBalance.lock(requiredAmount);
-        return fxRate;
-    }
-
-    private void handleSellPositionLock(User user, Asset asset, BigDecimal quantity) {
-        Position position = positionRepository.findByUserIdAndUniversalCode(user.getId(), asset.getUniversalCode())
-                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_QUANTITY));
-        position.lockQuantity(quantity);
     }
 
     private void executeTrade(Order order, BigDecimal currentPrice, Balance assetBalance, Balance otherBalance, BigDecimal fxRate) {
         Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode()).orElseThrow();
         BigDecimal totalAmount = currentPrice.multiply(order.getQuantity());
         BigDecimal fee = totalAmount.multiply(asset.getFeeRate());
-        BigDecimal actualRequired = totalAmount.add(fee);
         BigDecimal realizedPnl = BigDecimal.ZERO;
         LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, LocalDate.now());
 
         if (order.getSide() == OrderSide.BUY) {
+            BigDecimal actualRequired = totalAmount.add(fee);
             assetBalance.unlock(actualRequired);
             assetBalance.decreaseAvailable(actualRequired);
             
@@ -224,24 +213,9 @@ public class TradingService {
             realizedPnl = currentPrice.subtract(position.getAvgBuyPrice()).multiply(order.getQuantity());
             position.unlockQuantity(order.getQuantity());
             position.subtractPosition(currentPrice, order.getQuantity());
-            
-            BigDecimal netProceeds = totalAmount.subtract(fee);
-            if (asset.getAssetClass() == AssetClass.CRYPTO) {
-                assetBalance.increaseAvailable(netProceeds);
-            } else {
-                assetBalance.increaseUnsettled(netProceeds);
-                Settlement settlement = Settlement.builder()
-                        .trade(null) // 아래에서 Trade 생성 후 업데이트
-                        .user(order.getUser())
-                        .currency(order.getCurrency())
-                        .amount(netProceeds)
-                        .settlementDate(settlementDate)
-                        .status(Settlement.SettlementStatus.PENDING)
-                        .build();
-                settlementRepository.save(settlement);
-            }
         }
 
+        // Trade를 먼저 저장하여 ID를 확보 (무결성 보장)
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
@@ -256,13 +230,24 @@ public class TradingService {
                 .build();
         trade = tradeRepository.save(trade);
 
-        // 정산 데이터에 Trade ID 연결 (가능한 경우)
-        settlementRepository.findAllByStatusAndSettlementDate(Settlement.SettlementStatus.PENDING, settlementDate).stream()
-                .filter(s -> s.getTrade() == null && s.getUser().getId().equals(order.getUser().getId()))
-                .findFirst()
-                .ifPresent(s -> {
-                    // 실제 운영 환경에선 더 정확한 매핑 필요하나 현재는 단순화
-                });
+        // 매도 시에만 정산 데이터 생성
+        if (order.getSide() == OrderSide.SELL) {
+            BigDecimal netProceeds = totalAmount.subtract(fee);
+            if (asset.getAssetClass() == AssetClass.CRYPTO) {
+                assetBalance.increaseAvailable(netProceeds);
+            } else {
+                assetBalance.increaseUnsettled(netProceeds);
+                Settlement settlement = Settlement.builder()
+                        .trade(trade) // 저장된 trade 객체 바인딩
+                        .user(order.getUser())
+                        .currency(order.getCurrency())
+                        .amount(netProceeds)
+                        .settlementDate(settlementDate)
+                        .status(Settlement.SettlementStatus.PENDING)
+                        .build();
+                settlementRepository.save(settlement);
+            }
+        }
 
         eventPublisher.publishEvent(new TradeEvent(
                 trade.getId(), order.getId(), order.getUser().getId(), order.getUniversalCode(),
@@ -287,26 +272,16 @@ public class TradingService {
         return balances.stream()
                 .filter(b -> b.getCurrency() == currency)
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE));
-    }
-
-    private void validateMinOrderAmount(Currency currency, BigDecimal amount) {
-        BigDecimal min = (currency == Currency.KRW) ? MIN_ORDER_AMOUNT_KRW : MIN_ORDER_AMOUNT_USD;
-        if (amount.compareTo(min) < 0) throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
-    }
-
-    private void validateOrderRequest(OrderCreateRequest request) {
-        if (request.type() == OrderType.MARKET && request.price() != null) throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
-        if (request.type() == OrderType.LIMIT && (request.price() == null || request.price().compareTo(BigDecimal.ZERO) <= 0)) throw new BusinessException(ErrorCode.TRADING_INVALID_ORDER_PRICE);
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_BALANCE_NOT_FOUND));
     }
 
     @Transactional
     public void resetAccount(Long userId) {
-        // 추후 구현
+        // Balance 기반 리셋 로직 추후 구현
     }
 
     @Transactional
     public void cancelOrder(Long userId, Long orderId) {
-        // 추후 구현
+        // Balance 기반 취소 로직 추후 구현
     }
 }
