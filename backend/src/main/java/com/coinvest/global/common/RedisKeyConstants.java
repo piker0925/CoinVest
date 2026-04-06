@@ -17,6 +17,11 @@ public final class RedisKeyConstants {
     public static final String TICKER_PRICE_KEY = "price:ticker:%s";
 
     /**
+     * 실시간 가격 이벤트 채널 (Redis Pub/Sub).
+     */
+    public static final String PRICE_TICKER_CHANNEL = "price:ticker:events";
+
+    /**
      * 포트폴리오 자산 매핑 (특정 코인을 보유한 포트폴리오 목록).
      * 예: portfolio:asset:CRYPTO:BTC -> [1, 5, 10] (Portfolio IDs)
      */

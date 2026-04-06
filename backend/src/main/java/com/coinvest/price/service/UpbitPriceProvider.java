@@ -2,12 +2,12 @@ package com.coinvest.price.service;
 
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.domain.AssetClass;
-import com.coinvest.global.common.KafkaTopicConstants;
+import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.price.dto.TickerEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -37,7 +37,7 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
 
     private final String websocketUrl;
     private final ObjectMapper objectMapper;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
     private final HttpClient httpClient;
     private final ScheduledExecutorService scheduler;
 
@@ -49,10 +49,10 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
     public UpbitPriceProvider(
             @Value("${upbit.websocket.url}") String websocketUrl,
             ObjectMapper objectMapper,
-            KafkaTemplate<String, Object> kafkaTemplate) {
+            RedisTemplate<String, Object> redisTemplate) {
         this.websocketUrl = websocketUrl;
         this.objectMapper = objectMapper;
-        this.kafkaTemplate = kafkaTemplate;
+        this.redisTemplate = redisTemplate;
         this.httpClient = HttpClient.newBuilder()
                 .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .build();
@@ -175,8 +175,8 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
                         .tradeTimestamp(upbitEvent.getTradeTimestamp())
                         .build();
 
-                // universalCode를 키로 하여 Kafka 발행
-                kafkaTemplate.send(KafkaTopicConstants.PRICE_TICKER_UPDATED, event.getUniversalCode(), event);
+                // universalCode를 키로 하여 Redis Pub/Sub 발행
+                redisTemplate.convertAndSend(RedisKeyConstants.PRICE_TICKER_CHANNEL, event);
             }
 
         } catch (Exception e) {

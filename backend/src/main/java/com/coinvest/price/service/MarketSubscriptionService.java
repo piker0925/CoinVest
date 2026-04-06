@@ -3,15 +3,15 @@ package com.coinvest.price.service;
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.domain.AssetClass;
 import com.coinvest.asset.repository.AssetRepository;
-import com.coinvest.global.common.KafkaTopicConstants;
+import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import com.coinvest.price.dto.TickerEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.context.event.EventListener;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -31,14 +31,14 @@ public class MarketSubscriptionService {
     private final PriceProviderRouter priceProviderRouter;
     private final PortfolioRepository portfolioRepository;
     private final AssetRepository assetRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @PostConstruct
     public void initSubscriptions() {
         refreshSubscriptions();
     }
 
-    @KafkaListener(topics = KafkaTopicConstants.PORTFOLIO_UPDATED, groupId = "subscription-service")
+    @EventListener
     public void onPortfolioUpdated(PortfolioUpdatedEvent event) {
         log.info("Received portfolio update event. Refreshing subscriptions...");
         refreshSubscriptions();
@@ -89,7 +89,7 @@ public class MarketSubscriptionService {
         List<TickerEvent> events = priceProviderRouter.fetchPrices(assetsToPoll);
 
         for (TickerEvent event : events) {
-            kafkaTemplate.send(KafkaTopicConstants.PRICE_TICKER_UPDATED, event.getUniversalCode(), event);
+            redisTemplate.convertAndSend(RedisKeyConstants.PRICE_TICKER_CHANNEL, event);
         }
     }
 }

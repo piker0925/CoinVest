@@ -1,7 +1,6 @@
 package com.coinvest.portfolio.service;
 
 import com.coinvest.auth.domain.User;
-import com.coinvest.global.common.KafkaTopicConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.*;
@@ -12,7 +11,7 @@ import com.coinvest.portfolio.dto.PortfolioUpdateRequest;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +30,7 @@ public class PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
     private final AlertSettingRepository alertSettingRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final int MAX_PORTFOLIO_COUNT = 5;
 
@@ -74,7 +73,7 @@ public class PortfolioService {
                 .build();
         alertSettingRepository.save(alertSetting);
 
-        // 5. Kafka 이벤트 발행
+        // 5. 이벤트 발행
         publishPortfolioEvent(savedPortfolio, PortfolioUpdatedEvent.UpdateType.CREATE);
 
         return PortfolioResponse.from(savedPortfolio);
@@ -167,7 +166,7 @@ public class PortfolioService {
     }
 
     /**
-     * Kafka 이벤트 발행.
+     * 포트폴리오 업데이트 이벤트 발행.
      */
     private void publishPortfolioEvent(Portfolio portfolio, PortfolioUpdatedEvent.UpdateType type) {
         List<String> universalCodes = portfolio.getAssets().stream()
@@ -181,7 +180,7 @@ public class PortfolioService {
                 type
         );
 
-        kafkaTemplate.send(KafkaTopicConstants.PORTFOLIO_UPDATED, event);
+        eventPublisher.publishEvent(event);
         log.info("Published portfolio event: [id={}, type={}]", portfolio.getId(), type);
     }
 }

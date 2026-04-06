@@ -1,6 +1,5 @@
 package com.coinvest.portfolio.service;
 
-import com.coinvest.global.common.KafkaTopicConstants;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
@@ -8,16 +7,16 @@ import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 
 /**
- * 포트폴리오와 코인(Market) 간의 매핑 정보를 Redis에 관리하는 서비스.
- * 실시간 평가 시 특정 코인의 가격 변화에 영향을 받는 포트폴리오를 O(1)로 찾기 위함.
+ * 포트폴리오와 자산(UniversalCode) 간의 매핑 정보를 Redis에 관리하는 서비스.
+ * 실시간 평가 시 특정 자산의 가격 변화에 영향을 받는 포트폴리오를 O(1)로 찾기 위함.
  */
 @Slf4j
 @Service
@@ -35,8 +34,7 @@ public class PortfolioMappingService {
         log.info("Initializing portfolio-asset mappings in Redis...");
         List<Portfolio> allPortfolios = portfolioRepository.findAll();
         
-        // 기존 매핑 초기화 (선택 사항: 전체 삭제 후 재구축)
-        // 여기서는 안전하게 전체 포트폴리오를 순회하며 갱신함
+        // 기존 매핑 초기화 (안전하게 전체 포트폴리오를 순회하며 갱신함)
         for (Portfolio portfolio : allPortfolios) {
             updateMapping(portfolio);
         }
@@ -46,15 +44,15 @@ public class PortfolioMappingService {
     /**
      * 포트폴리오 업데이트 이벤트 수신 시 Redis 매핑 갱신.
      */
-    @KafkaListener(topics = KafkaTopicConstants.PORTFOLIO_UPDATED, groupId = "mapping-service")
+    @EventListener
     public void onPortfolioUpdated(PortfolioUpdatedEvent event) {
-        log.info("Received portfolio update event for ID: {}. Updating Redis mappings.", event.getPortfolioId());
+        log.info("Received portfolio update event for ID: {}. Updating Redis mappings.", event.portfolioId());
         
-        if (event.getType() == PortfolioUpdatedEvent.UpdateType.DELETE) {
-            removeMapping(event.getPortfolioId(), event.getUniversalCodes());
+        if (event.type() == PortfolioUpdatedEvent.UpdateType.DELETE) {
+            removeMapping(event.portfolioId(), event.universalCodes());
         } else {
             // CREATE, UPDATE의 경우 DB에서 최신 정보를 조회하여 갱신
-            portfolioRepository.findById(event.getPortfolioId())
+            portfolioRepository.findById(event.portfolioId())
                     .ifPresent(this::updateMapping);
         }
     }

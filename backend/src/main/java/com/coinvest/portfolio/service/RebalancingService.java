@@ -1,18 +1,18 @@
 package com.coinvest.portfolio.service;
-import com.coinvest.global.common.KafkaTopicConstants;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.*;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.dto.RebalancingProposal;
+import com.coinvest.portfolio.event.RebalanceAlertEvent;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
 import com.coinvest.trading.domain.VirtualAccount;
 import com.coinvest.trading.repository.VirtualAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +37,7 @@ public class RebalancingService {
     private final VirtualAccountRepository virtualAccountRepository;
     private final PortfolioValuationService valuationService;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final BigDecimal TOLERANCE = new BigDecimal("0.0001"); // 0.01%
     private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");  // 업비트 기준 0.05%
@@ -74,8 +74,8 @@ public class RebalancingService {
             return;
         }
 
-        // 3. Kafka 이벤트 발행
-        kafkaTemplate.send(KafkaTopicConstants.ALERT_REBALANCE_TRIGGERED, valuation);
+        // 3. 이벤트 발행
+        eventPublisher.publishEvent(new RebalanceAlertEvent(valuation));
 
         // 4. Redis 상태 업데이트
         redisTemplate.opsForValue().set(cooldownKey, "LOCKED", Duration.ofMinutes(5));
