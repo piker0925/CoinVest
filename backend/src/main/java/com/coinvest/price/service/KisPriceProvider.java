@@ -92,9 +92,9 @@ public class KisPriceProvider implements PriceProvider {
     }
 
     private TickerEvent fetchSinglePrice(Asset asset, String token) {
-        // Thundering Herd 방어용 초기 Jitter
+        // Thundering Herd 방어용 초기 Jitter (0~500ms로 단축)
         try {
-            long jitter = ThreadLocalRandom.current().nextLong(2000);
+            long jitter = ThreadLocalRandom.current().nextLong(500);
             sleeper.sleep(jitter);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

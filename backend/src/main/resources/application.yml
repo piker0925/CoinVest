@@ -54,8 +54,8 @@ server:
 logging:
   level:
     root: INFO
-    com.coinvest: DEBUG
-    org.springframework.web: DEBUG
-    org.hibernate.SQL: DEBUG
+    com.coinvest: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: INFO
   pattern:
     console: "[%d{HH:mm:ss.SSS}] [%-5level] [%thread] %logger{36} - %msg%n"
