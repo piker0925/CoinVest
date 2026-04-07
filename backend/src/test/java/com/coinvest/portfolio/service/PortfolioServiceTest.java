@@ -82,7 +82,7 @@ class PortfolioServiceTest {
         // then
         assertThat(response.getName()).isEqualTo("My Portfolio");
         assertThat(response.getAssets()).hasSize(2);
-        verify(eventPublisher, times(1)).publishEvent(any());
+        verify(eventPublisher, times(1)).publishEvent(any(com.coinvest.portfolio.dto.PortfolioUpdatedEvent.class));
     }
 
     @Test

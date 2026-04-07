@@ -4,6 +4,7 @@ import com.coinvest.auth.dto.LoginRequest;
 import com.coinvest.auth.dto.TokenResponse;
 import com.coinvest.auth.service.AuthService;
 import com.coinvest.global.restdocs.RestDocsSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -24,6 +25,22 @@ class AuthControllerDocsTest extends RestDocsSupport {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private com.coinvest.auth.service.TokenService tokenService;
+
+    @MockitoBean
+    private org.springframework.boot.web.client.RestTemplateBuilder restTemplateBuilder;
+
+    @MockitoBean
+    private com.coinvest.global.security.JwtTokenProvider jwtTokenProvider;
+
+    @BeforeEach
+    void setUp() {
+        given(restTemplateBuilder.setConnectTimeout(any())).willReturn(restTemplateBuilder);
+        given(restTemplateBuilder.setReadTimeout(any())).willReturn(restTemplateBuilder);
+        given(restTemplateBuilder.build()).willReturn(new org.springframework.web.client.RestTemplate());
+    }
 
     @Test
     @DisplayName("로그인 API 문서화")

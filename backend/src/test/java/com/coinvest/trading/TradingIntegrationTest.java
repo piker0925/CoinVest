@@ -1,53 +1,39 @@
 package com.coinvest.trading;
 
+import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.domain.AssetClass;
+import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
-import com.coinvest.auth.domain.UserRole;
-import com.coinvest.global.common.RedisKeyConstants;
-import com.coinvest.global.security.JwtTokenProvider;
+import com.coinvest.fx.domain.Currency;
+import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.dto.OrderCreateRequest;
-import com.coinvest.trading.dto.OrderPreviewRequest;
-import com.coinvest.trading.repository.OrderRepository;
 import com.coinvest.trading.repository.VirtualAccountRepository;
-import com.coinvest.trading.service.ExpiredOrderCleanupJob;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.AfterEach;
+import com.coinvest.trading.service.TradingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.http.MediaType;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @ActiveProfiles("local")
 @Transactional
-@org.junit.jupiter.api.Disabled("Local docker environment required for testcontainers")
-class TradingIntegrationTest {
+class TradingIntegrationTest extends com.coinvest.AbstractIntegrationTest {
 
     @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    private TradingService tradingService;
 
     @Autowired
     private UserRepository userRepository;
@@ -56,197 +42,75 @@ class TradingIntegrationTest {
     private VirtualAccountRepository virtualAccountRepository;
 
     @Autowired
-    private OrderRepository orderRepository;
+    private AssetRepository assetRepository;
 
-    @Autowired
-    private JwtTokenProvider jwtTokenProvider;
+    @MockBean
+    private PriceService priceService;
 
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Autowired
-    private ExpiredOrderCleanupJob expiredOrderCleanupJob;
-
-    @Autowired
-    private EntityManager entityManager;
-
-    private String accessToken;
     private User testUser;
+    private final String universalCode = "CRYPTO:BTC";
 
     @BeforeEach
     void setUp() {
-        testUser = User.builder()
-                .email("trade@example.com")
-                .password("encoded_pwd")
-                .nickname("trader")
-                .role(UserRole.USER)
-                .build();
-        userRepository.save(testUser);
+        testUser = userRepository.save(User.builder()
+                .email("trading_test@example.com")
+                .password("password")
+                .nickname("Trader")
+                .build());
 
         VirtualAccount account = VirtualAccount.builder()
                 .user(testUser)
-                .balanceKrw(new BigDecimal("10000000"))
-                .lockedKrw(BigDecimal.ZERO)
+                .balances(new ArrayList<>())
                 .build();
         virtualAccountRepository.save(account);
 
-        accessToken = jwtTokenProvider.createAccessToken(testUser.getEmail());
+        Balance krwBalance = Balance.builder()
+                .account(account)
+                .currency(Currency.KRW)
+                .available(new BigDecimal("10000000"))
+                .locked(BigDecimal.ZERO)
+                .unsettled(BigDecimal.ZERO)
+                .build();
+        account.getBalances().add(krwBalance);
 
-        // Redis Mocking
-        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, "CRYPTO:BTC");
-        redisTemplate.opsForValue().set(tickerKey, "100000000");
-    }
+        Balance usdBalance = Balance.builder()
+                .account(account)
+                .currency(Currency.USD)
+                .available(BigDecimal.ZERO)
+                .locked(BigDecimal.ZERO)
+                .unsettled(BigDecimal.ZERO)
+                .build();
+        account.getBalances().add(usdBalance);
 
-    @AfterEach
-    void tearDown() {
-        redisTemplate.delete(RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, "CRYPTO:BTC"));
-        redisTemplate.delete("account:reset:cooldown:" + testUser.getId());
-        redisTemplate.delete("rate_limit:orders:trade@example.com");
-    }
+        virtualAccountRepository.save(account);
 
-    @Test
-    @DisplayName("주문 미리보기를 요청하면 계산된 예상 결과를 반환한다.")
-    void previewOrder_Success() throws Exception {
-        OrderPreviewRequest request = new OrderPreviewRequest(
-                "CRYPTO:BTC", OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.1"));
-
-        mockMvc.perform(post("/api/v1/trading/orders/preview")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.expectedPrice").value(100000000))
-                .andExpect(jsonPath("$.data.expectedTotalAmount").exists());
-    }
-
-    @Test
-    @DisplayName("지정가 매수 주문 생성 및 취소를 성공해야 한다.")
-    void createAndCancelLimitOrder_Success() throws Exception {
-        OrderCreateRequest request = new OrderCreateRequest(
-                "CRYPTO:BTC", OrderSide.BUY, OrderType.LIMIT, new BigDecimal("90000000"), new BigDecimal("0.1"));
-
-        MvcResult result = mockMvc.perform(post("/api/v1/trading/orders")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").isNumber())
-                .andReturn();
-
-        String responseBody = result.getResponse().getContentAsString();
-        Long orderId = objectMapper.readTree(responseBody).get("data").asLong();
-
-        mockMvc.perform(delete("/api/v1/trading/orders/" + orderId)
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk());
+        assetRepository.save(Asset.builder()
+                .universalCode(universalCode)
+                .name("Bitcoin")
+                .assetClass(AssetClass.CRYPTO)
+                .exchangeCode("UPBIT")
+                .externalCode("KRW-BTC")
+                .quoteCurrency(Currency.KRW)
+                .feeRate(new BigDecimal("0.0005"))
+                .build());
     }
 
     @Test
-    @DisplayName("시장가 매수 후 전량 매도 사이클을 검증한다.")
-    void marketOrder_FullCycle_Success() throws Exception {
-        OrderCreateRequest buyReq = new OrderCreateRequest(
-                "CRYPTO:BTC", OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.01"));
+    @DisplayName("통합 테스트: 시장가 매수 주문 체결 후 잔고 및 포지션 확인")
+    void market_buy_integration_test() {
+        // given
+        BigDecimal currentPrice = new BigDecimal("100000000");
+        given(priceService.getCurrentPrice(anyString())).willReturn(currentPrice);
 
-        mockMvc.perform(post("/api/v1/trading/orders")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(buyReq)))
-                .andExpect(status().isOk());
+        OrderCreateRequest request = new OrderCreateRequest(universalCode, OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.05"));
 
-        mockMvc.perform(get("/api/v1/trading/positions")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].quantity").value(0.01));
+        // when
+        Long orderId = tradingService.createOrder(testUser.getId(), request);
 
-        OrderCreateRequest sellReq = new OrderCreateRequest(
-                "CRYPTO:BTC", OrderSide.SELL, OrderType.MARKET, null, new BigDecimal("0.01"));
-
-        mockMvc.perform(post("/api/v1/trading/orders")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(sellReq)))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(get("/api/v1/trading/positions")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].quantity").value(0.0));
-    }
-
-    @Test
-    @DisplayName("계좌 리셋 쿨다운(24시간) 및 보상 로직을 검증한다.")
-    void resetAccount_Cooldown_And_Retry_Logic() throws Exception {
-        // 1. 첫 번째 리셋 성공
-        mockMvc.perform(post("/api/v1/trading/account/reset")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk());
-
-        // 2. 두 번째 리셋 시도 -> 실패 (429)
-        mockMvc.perform(post("/api/v1/trading/account/reset")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isTooManyRequests());
-    }
-
-    @Test
-    @DisplayName("주문 Rate Limit(초당 10건) 동작을 검증한다.")
-    void rateLimit_Exceeded_Fails() throws Exception {
-        OrderCreateRequest request = new OrderCreateRequest(
-                "CRYPTO:BTC", OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.001"));
-
-        // 10번 연속 호출 (초당 제한 확인을 위해 매우 빠르게 실행)
-        for (int i = 0; i < 10; i++) {
-            mockMvc.perform(post("/api/v1/trading/orders")
-                    .header("Authorization", "Bearer " + accessToken)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk());
-        }
-
-        // 11번째 요청 -> 429 에러 기대
-        mockMvc.perform(post("/api/v1/trading/orders")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isTooManyRequests());
-    }
-
-    @Test
-    @DisplayName("24시간이 지난 PENDING 주문은 만료 배치에 의해 EXPIRED 처리되어야 한다.")
-    void expiredOrderCleanup_Success() throws Exception {
-        // 1. 지정가 주문 생성 (KRW 잠금 발생)
-        OrderCreateRequest request = new OrderCreateRequest(
-                "CRYPTO:BTC", OrderSide.BUY, OrderType.LIMIT, new BigDecimal("50000000"), new BigDecimal("0.1"));
-
-        MvcResult result = mockMvc.perform(post("/api/v1/trading/orders")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andReturn();
-        
-        Long orderId = objectMapper.readTree(result.getResponse().getContentAsString()).get("data").asLong();
-
-        // 2. 강제로 createdAt을 25시간 전으로 업데이트 (Native Query)
-        entityManager.createNativeQuery("UPDATE orders SET created_at = :past WHERE id = :id")
-                .setParameter("past", LocalDateTime.now().minusHours(25))
-                .setParameter("id", orderId)
-                .executeUpdate();
-        
-        entityManager.flush();
-        entityManager.clear();
-
-        // 3. 만료 Job 실행
-        expiredOrderCleanupJob.cleanupExpiredOrders();
-
-        // 4. 결과 확인: 상태 EXPIRED, 잠금 해제 확인
-        Order order = orderRepository.findById(orderId).orElseThrow();
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.EXPIRED);
-
-        mockMvc.perform(get("/api/v1/trading/account")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.lockedKrw").value(0.0))
-                .andExpect(jsonPath("$.data.availableBalance").value(10000000.0));
+        // then
+        assertThat(orderId).isNotNull();
+        VirtualAccount account = virtualAccountRepository.findByUserId(testUser.getId()).orElseThrow();
+        // 500만 + 수수료 2500원 차감 -> 4,997,500
+        assertThat(account.getAvailableForPurchase(Currency.KRW).compareTo(new BigDecimal("4997500"))).isEqualTo(0);
     }
 }

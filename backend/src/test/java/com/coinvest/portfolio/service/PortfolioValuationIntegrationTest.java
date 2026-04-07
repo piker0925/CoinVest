@@ -11,6 +11,7 @@ import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.price.service.PriceService;
+import com.coinvest.trading.domain.Balance;
 import com.coinvest.trading.domain.VirtualAccount;
 import com.coinvest.trading.repository.VirtualAccountRepository;
 import jakarta.persistence.EntityManager;
@@ -34,7 +35,7 @@ import static org.mockito.Mockito.*;
 @SpringBootTest
 @ActiveProfiles("local")
 @Transactional
-class PortfolioValuationIntegrationTest {
+class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegrationTest {
 
     @Autowired
     private PortfolioValuationService valuationService;
@@ -72,11 +73,22 @@ class PortfolioValuationIntegrationTest {
                 .build();
         userRepository.save(user);
 
-        // 2. 가상 계좌 생성
+        // 2. 가상 계좌 및 잔고 생성
         VirtualAccount account = VirtualAccount.builder()
                 .user(user)
                 .balances(new ArrayList<>())
                 .build();
+        virtualAccountRepository.save(account);
+
+        // 초기 KRW 잔고 추가 (Buying Power 테스트용)
+        Balance krwBalance = Balance.builder()
+                .account(account)
+                .currency(Currency.KRW)
+                .available(BigDecimal.ZERO)
+                .locked(BigDecimal.ZERO)
+                .unsettled(BigDecimal.ZERO)
+                .build();
+        account.getBalances().add(krwBalance);
         virtualAccountRepository.save(account);
 
         // 3. 포트폴리오 생성
@@ -94,31 +106,66 @@ class PortfolioValuationIntegrationTest {
     }
 
     @Test
-    @DisplayName("단일 자산 평가 로직 검증")
-    void evaluate_Logic_Success() {
+    @DisplayName("혼합 자산 포트폴리오 평가 시 기준 통화(KRW)로 정확히 환산되어야 하며, 계좌 현금은 제외되어야 한다.")
+    void evaluate_MixedAssets_ExcludingCash() {
         // [Given]
         Portfolio portfolio = portfolioRepository.findById(testPortfolioId).orElseThrow();
         
-        // PortfolioAsset을 생성할 때 수동으로 연관 관계 설정 (protected 메서드 대신 필드 직접 주입 시뮬레이션)
-        PortfolioAsset asset = PortfolioAsset.builder()
-                .universalCode("CRYPTO:BTC")
-                .currency(Currency.KRW)
-                .quantity(new BigDecimal("1.0"))
-                .targetWeight(BigDecimal.ONE)
-                .build();
+        PortfolioAsset btcAsset = PortfolioAsset.builder()
+                .universalCode("CRYPTO:BTC").currency(Currency.KRW).quantity(new BigDecimal("1.0")).targetWeight(new BigDecimal("0.5")).build();
+        PortfolioAsset aaplAsset = PortfolioAsset.builder()
+                .universalCode("US_STOCK:AAPL").currency(Currency.USD).quantity(new BigDecimal("10.0")).targetWeight(new BigDecimal("0.5")).build();
         
-        portfolio.addAsset(asset);
+        portfolio.addAsset(btcAsset);
+        portfolio.addAsset(aaplAsset);
         portfolioRepository.saveAndFlush(portfolio);
 
-        // Mock
-        when(priceService.getPrices(anyList())).thenReturn(Map.of("CRYPTO:BTC", new BigDecimal("100000000")));
-        when(exchangeRateService.getExchangeRateWithStatus(any(), any()))
+        // 현금 1,000,000 KRW 추가 (평가액에 미포함 확인용 - Policy 1-A)
+        VirtualAccount account = virtualAccountRepository.findByUserId(portfolio.getUser().getId()).orElseThrow();
+        Balance krwBalance = account.getBalance(Currency.KRW);
+        krwBalance.deposit(new BigDecimal("1000000"));
+        virtualAccountRepository.saveAndFlush(account);
+
+        // Mock Prices & FX
+        when(priceService.getPrices(anyList())).thenReturn(Map.of(
+                "CRYPTO:BTC", new BigDecimal("100000000"),
+                "US_STOCK:AAPL", new BigDecimal("200")
+        ));
+        
+        when(exchangeRateService.getExchangeRateWithStatus(Currency.KRW, Currency.KRW))
                 .thenReturn(new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false));
+        when(exchangeRateService.getExchangeRateWithStatus(Currency.USD, Currency.KRW))
+                .thenReturn(new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), false));
 
         // [When]
         PortfolioValuation result = valuationService.evaluate(testPortfolioId, Currency.KRW);
 
         // [Then]
-        assertThat(result.getTotalEvaluationBase()).isEqualByComparingTo("100000000");
+        // BTC (100M) + AAPL (10.0*200*1400 = 2.8M) = 102,800,000 (현금 1M 제외 확인)
+        assertThat(result.getTotalEvaluationBase()).isEqualByComparingTo("102800000");
+        assertThat(result.isStaleExchangeRate()).isFalse();
+    }
+
+    @Test
+    @DisplayName("환율 정보가 지연(Stale)되었을 때 에러 없이 결과에 플래그가 표시되어야 한다.")
+    void evaluate_WithStaleExchangeRate() {
+        // [Given]
+        Portfolio portfolio = portfolioRepository.findById(testPortfolioId).orElseThrow();
+        portfolio.addAsset(PortfolioAsset.builder()
+                .universalCode("US_STOCK:AAPL")
+                .currency(Currency.USD)
+                .quantity(BigDecimal.ONE)
+                .targetWeight(BigDecimal.ONE)
+                .build());
+        portfolioRepository.saveAndFlush(portfolio);
+
+        when(exchangeRateService.getExchangeRateWithStatus(any(), any()))
+                .thenReturn(new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), true));
+
+        // [When]
+        PortfolioValuation result = valuationService.evaluate(testPortfolioId, Currency.KRW);
+
+        // [Then]
+        assertThat(result.isStaleExchangeRate()).isTrue();
     }
 }
