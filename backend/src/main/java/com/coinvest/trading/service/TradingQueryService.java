@@ -1,10 +1,13 @@
 package com.coinvest.trading.service;
 
+import com.coinvest.fx.domain.Currency;
+import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.CursorPageResponse;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.global.exception.ResourceNotFoundException;
+import com.coinvest.trading.domain.Balance;
 import com.coinvest.trading.domain.Order;
 import com.coinvest.trading.domain.Position;
 import com.coinvest.trading.domain.Trade;
@@ -20,6 +23,7 @@ import com.coinvest.trading.repository.VirtualAccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -29,6 +33,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 거래 관련 조회 전용 서비스.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -36,90 +43,101 @@ import java.util.stream.Collectors;
 public class TradingQueryService {
 
     private final OrderRepository orderRepository;
-    private final TradeRepository tradeRepository;
     private final PositionRepository positionRepository;
+    private final TradeRepository tradeRepository;
     private final VirtualAccountRepository virtualAccountRepository;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ExchangeRateService exchangeRateService;
 
-    // 테스트/초기자금 (Phase 3 요구사항에 1000만원 고정으로 산정할 수 있으나, 
-    // 나중을 위해 Account 생성 시의 초기 자금을 기록하는 필드가 없다면 1000만원으로 하드코딩 또는 계좌 입금액을 조회해야 함. 
-    // 임시로 1000만원 기준)
-    private static final BigDecimal INITIAL_FUND = new BigDecimal("10000000");
+    /**
+     * 사용자의 가상 계좌 및 통합 자산 정보 조회.
+     */
+    public VirtualAccountResponse getAccount(Long userId) {
+        VirtualAccount account = virtualAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
 
-    public CursorPageResponse<OrderResponse> getOrders(Long userId, Long cursorId, int size) {
-        PageRequest pageRequest = PageRequest.of(0, size);
-        Slice<Order> orderSlice;
+        // 1. 모든 통화 잔고를 KRW로 통합 환산 (Buying Power 통합)
+        BigDecimal totalBalanceKrw = BigDecimal.ZERO;
+        for (Balance balance : account.getBalances()) {
+            BigDecimal rate = exchangeRateService.getExchangeRateWithStatus(balance.getCurrency(), Currency.KRW).rate();
+            BigDecimal balanceValueKrw = balance.getTotal().multiply(rate);
+            totalBalanceKrw = totalBalanceKrw.add(balanceValueKrw);
+        }
+
+        // 2. 모든 보유 자산 평가액 합산 (KRW 기준)
+        List<PositionResponse> positions = getPositions(userId);
+        BigDecimal totalPositionEvalKrw = positions.stream()
+                .map(PositionResponse::evaluationAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        if (cursorId == null) {
-            orderSlice = orderRepository.findByUserIdOrderByIdDesc(userId, pageRequest);
-        } else {
-            orderSlice = orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursorId, pageRequest);
-        }
-
-        List<OrderResponse> content = orderSlice.getContent().stream()
-                .map(OrderResponse::from)
-                .collect(Collectors.toList());
-
-        Long nextCursor = null;
-        if (orderSlice.hasNext() && !content.isEmpty()) {
-            nextCursor = content.get(content.size() - 1).id();
-        }
-
-        return CursorPageResponse.of(content, nextCursor, orderSlice.hasNext());
+        // 3. 최종 순자산(Net Worth) 반환
+        return VirtualAccountResponse.of(account, totalBalanceKrw, totalPositionEvalKrw);
     }
 
-    public CursorPageResponse<TradeResponse> getTrades(Long userId, Long cursorId, int size) {
-        PageRequest pageRequest = PageRequest.of(0, size);
-        Slice<Trade> tradeSlice;
-        
-        if (cursorId == null) {
-            tradeSlice = tradeRepository.findByUserIdOrderByIdDesc(userId, pageRequest);
-        } else {
-            tradeSlice = tradeRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursorId, pageRequest);
-        }
-
-        List<TradeResponse> content = tradeSlice.getContent().stream()
-                .map(TradeResponse::from)
-                .collect(Collectors.toList());
-
-        Long nextCursor = null;
-        if (tradeSlice.hasNext() && !content.isEmpty()) {
-            nextCursor = content.get(content.size() - 1).id();
-        }
-
-        return CursorPageResponse.of(content, nextCursor, tradeSlice.hasNext());
-    }
-
+    /**
+     * 보유 포지션 리스트 조회 (현재가 포함).
+     */
     public List<PositionResponse> getPositions(Long userId) {
-        List<Position> positions = positionRepository.findByUserId(userId);
-        
+        List<Position> positions = positionRepository.findAllByUserId(userId);
+
         return positions.stream()
                 .map(pos -> {
                     BigDecimal currentPrice = getCurrentPriceFromRedis(pos.getUniversalCode());
-                    if (currentPrice == null) {
-                        // Redis 미스 시 평가를 위해 avgBuyPrice를 폴백으로 사용 (조회용이므로 예외 던지지 않음)
-                        currentPrice = pos.getAvgBuyPrice(); 
-                    }
                     return PositionResponse.of(pos, currentPrice);
                 })
                 .collect(Collectors.toList());
     }
 
-    public VirtualAccountResponse getAccount(Long userId) {
-        VirtualAccount account = virtualAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
+    /**
+     * 주문 내역 조회 (무한 스크롤).
+     */
+    public CursorPageResponse<OrderResponse> getOrders(Long userId, Long cursorId, int size) {
+        Pageable pageable = PageRequest.of(0, size);
+        Slice<Order> orders;
 
-        List<PositionResponse> positions = getPositions(userId);
-        
-        return VirtualAccountResponse.of(account, positions, INITIAL_FUND);
+        if (cursorId == null) {
+            orders = orderRepository.findByUserIdOrderByIdDesc(userId, pageable);
+        } else {
+            orders = orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursorId, pageable);
+        }
+
+        List<OrderResponse> content = orders.getContent().stream()
+                .map(OrderResponse::from)
+                .collect(Collectors.toList());
+
+        Long nextCursor = content.isEmpty() ? null : content.get(content.size() - 1).id();
+
+        return new CursorPageResponse<>(content, nextCursor, orders.hasNext());
+    }
+
+    /**
+     * 체결 내역 조회 (무한 스크롤).
+     */
+    public CursorPageResponse<TradeResponse> getTrades(Long userId, Long cursorId, int size) {
+        Pageable pageable = PageRequest.of(0, size);
+        Slice<Trade> trades;
+
+        if (cursorId == null) {
+            trades = tradeRepository.findByUserIdOrderByIdDesc(userId, pageable);
+        } else {
+            trades = tradeRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursorId, pageable);
+        }
+
+        List<TradeResponse> content = trades.getContent().stream()
+                .map(TradeResponse::from)
+                .collect(Collectors.toList());
+
+        Long nextCursor = content.isEmpty() ? null : content.get(content.size() - 1).id();
+
+        return new CursorPageResponse<>(content, nextCursor, trades.hasNext());
     }
 
     private BigDecimal getCurrentPriceFromRedis(String universalCode) {
         String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
         Object priceObj = redisTemplate.opsForValue().get(tickerKey);
-        if (priceObj == null) {
-            return null;
-        }
+
+        if (priceObj == null) return null;
+
         try {
             return new BigDecimal(priceObj.toString());
         } catch (NumberFormatException e) {

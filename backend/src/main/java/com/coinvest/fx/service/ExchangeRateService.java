@@ -32,6 +32,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.coinvest.global.common.RedisKeyConstants;
+import org.springframework.data.redis.core.RedisTemplate;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -43,12 +46,13 @@ public class ExchangeRateService {
     private final ObjectMapper objectMapper;
     private final AlertHistoryRepository alertHistoryRepository;
     private final KisApiManager kisApiManager;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     private static final int MAX_AGE_HOURS = 48;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
-    // 로컬 캐시 (N+1 방지)
-    private final Map<String, ExchangeRate> rateCache = new ConcurrentHashMap<>();
+    // 로컬 캐시 (Secondary)
+    private final Map<String, ExchangeRate> localRateCache = new ConcurrentHashMap<>();
 
     @Value("${coinvest.alerts.system-webhook-url:}")
     private String systemWebhookUrl;
@@ -56,31 +60,38 @@ public class ExchangeRateService {
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
     /**
-     * 환율 정보와 상태를 함께 반환. (평가 서비스용 - 정책 2-B 반영)
+     * 환율 정보와 상태를 함께 반환. (L1: Redis, L2: Local, L3: DB)
      */
     public ExchangeRateResponse getExchangeRateWithStatus(Currency base, Currency quote) {
         if (base == quote) {
             return new ExchangeRateResponse(BigDecimal.ONE, false);
         }
 
-        String cacheKey = base.name() + ":" + quote.name();
-        // 캐시 확인 후 없으면 DB 조회 (간단한 로컬 캐시)
-        ExchangeRate rate = rateCache.computeIfAbsent(cacheKey, k -> 
+        String pair = base.name() + ":" + quote.name();
+        String redisKey = RedisKeyConstants.format(RedisKeyConstants.EXCHANGE_RATE_KEY, pair);
+
+        // 1. L1: Redis 확인
+        Object redisVal = redisTemplate.opsForValue().get(redisKey);
+        if (redisVal != null) {
+            return new ExchangeRateResponse(new BigDecimal(redisVal.toString()), false);
+        }
+
+        // 2. L2: 로컬/DB 확인 및 Redis 갱신
+        ExchangeRate rate = localRateCache.computeIfAbsent(pair, k -> 
             exchangeRateRepository.findFirstByBaseCurrencyAndQuoteCurrencyOrderByFetchedAtDesc(base, quote)
                 .orElse(null)
         );
 
         if (rate == null) {
-            log.error("Exchange rate not found in DB: base={}, quote={}", base, quote);
+            log.error("Exchange rate not found in DB: pair={}", pair);
             throw new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED);
         }
 
-        boolean isStale = Duration.between(rate.getFetchedAt(), LocalDateTime.now()).toHours() > MAX_AGE_HOURS;
-        if (isStale) {
-            log.warn("Using stale exchange rate ({}h+): base={}, quote={}", MAX_AGE_HOURS, base, quote);
-        }
+        BigDecimal rateVal = rate.getRate();
+        redisTemplate.opsForValue().set(redisKey, rateVal.toString(), Duration.ofHours(1));
 
-        return new ExchangeRateResponse(rate.getRate(), isStale);
+        boolean isStale = Duration.between(rate.getFetchedAt(), LocalDateTime.now()).toHours() > MAX_AGE_HOURS;
+        return new ExchangeRateResponse(rateVal, isStale);
     }
 
     public record ExchangeRateResponse(BigDecimal rate, boolean isStale) {}
@@ -113,9 +124,14 @@ public class ExchangeRateService {
                     .build();
 
             exchangeRateRepository.save(exchangeRate);
-            rateCache.put("USD:KRW", exchangeRate); // 캐시 갱신
+            localRateCache.put("USD:KRW", exchangeRate); // 캐시 갱신
+            
+            // Redis 갱신
+            String redisKey = RedisKeyConstants.format(RedisKeyConstants.EXCHANGE_RATE_KEY, "USD:KRW");
+            redisTemplate.opsForValue().set(redisKey, fetchedRate.toString(), Duration.ofHours(1));
+
             consecutiveFailures.set(0);
-            log.info("Exchange rate (USD/KRW) fetched from KIS: {}", fetchedRate);
+            log.info("Exchange rate (USD/KRW) fetched from KIS and cached in Redis: {}", fetchedRate);
 
         } catch (Exception e) {
             int failures = consecutiveFailures.incrementAndGet();

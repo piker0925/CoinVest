@@ -16,7 +16,8 @@ import java.util.List;
 public class PortfolioValuation {
 
     private Long portfolioId;
-    private BigDecimal totalEvaluationBase; // 기준 통화(Base) 합계 가치
+    private BigDecimal totalEvaluationBase; // 기준 통화(Base) 합계 가치 (자산만)
+    private BigDecimal buyingPowerBase;     // 계좌 가용 현금 (기준 통화 환산)
     private Currency baseCurrency;          // 기준 통화 (KRW/USD)
     private boolean isStaleExchangeRate;    // 환율 정보가 지연(48h+)되었는지 여부
     private List<AssetValuation> assetValuations;

@@ -54,6 +54,7 @@ public class PortfolioService {
         Portfolio portfolio = Portfolio.builder()
                 .name(request.getName())
                 .initialInvestment(request.getInitialInvestment())
+                .netContribution(request.getInitialInvestment())
                 .baseCurrency(request.getBaseCurrency())
                 .user(user)
                 .build();

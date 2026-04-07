@@ -10,5 +10,5 @@ import java.util.Optional;
 @Repository
 public interface PositionRepository extends JpaRepository<Position, Long> {
     Optional<Position> findByUserIdAndUniversalCode(Long userId, String universalCode);
-    List<Position> findByUserId(Long userId);
+    List<Position> findAllByUserId(Long userId);
 }

@@ -43,29 +43,31 @@ public class Position extends BaseEntity {
     private Currency currency;
 
     /**
-     * 평균 매수 가격.
+     * 평균 매수 단가.
      */
-    @Column(name = "avg_buy_price", nullable = false, precision = 20, scale = 4)
-    private BigDecimal avgBuyPrice;
+    @Column(name = "avg_buy_price", nullable = false, precision = 30, scale = 18)
+    @Builder.Default
+    private BigDecimal avgBuyPrice = BigDecimal.ZERO;
 
     /**
-     * 보유 수량 (총 수량 = 가용 수량 + 잠금 수량).
+     * 보유 수량 (가용 + 잠금).
      */
     @Column(nullable = false, precision = 30, scale = 18)
     private BigDecimal quantity;
 
     /**
-     * 지정가 매도 주문을 위해 잠긴 수량.
+     * 잠금 수량 (지정가 매도 주문 시 사용).
      */
     @Column(name = "locked_quantity", nullable = false, precision = 30, scale = 18)
     @Builder.Default
     private BigDecimal lockedQuantity = BigDecimal.ZERO;
 
     /**
-     * 누적 실현 손익.
+     * 실현 손익 (수수료 제외 순수익).
      */
     @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
-    private BigDecimal realizedPnl;
+    @Builder.Default
+    private BigDecimal realizedPnl = BigDecimal.ZERO;
 
     /**
      * 가용 수량 조회.

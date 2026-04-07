@@ -111,6 +111,10 @@ public class Balance extends BaseEntity {
     public BigDecimal getAvailableForPurchase() {
         return available.add(unsettled);
     }
+
+    public BigDecimal getTotal() {
+        return available.add(locked);
+    }
     
     public void unsettledWithdraw(BigDecimal amount) {
         if (unsettled.compareTo(amount) < 0) {

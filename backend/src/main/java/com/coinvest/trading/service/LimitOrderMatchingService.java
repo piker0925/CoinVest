@@ -1,13 +1,8 @@
 package com.coinvest.trading.service;
 
-import com.coinvest.trading.domain.Order;
-import com.coinvest.trading.domain.Position;
-import com.coinvest.trading.domain.Trade;
-import com.coinvest.trading.domain.VirtualAccount;
-import com.coinvest.trading.repository.OrderRepository;
-import com.coinvest.trading.repository.PositionRepository;
-import com.coinvest.trading.repository.TradeRepository;
-import com.coinvest.trading.repository.VirtualAccountRepository;
+import com.coinvest.fx.domain.Currency;
+import com.coinvest.trading.domain.*;
+import com.coinvest.trading.repository.*;
 import com.coinvest.trading.dto.TradeEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import com.coinvest.global.util.BigDecimalUtil;
@@ -28,6 +23,7 @@ public class LimitOrderMatchingService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final OrderRepository orderRepository;
     private final VirtualAccountRepository virtualAccountRepository;
+    private final BalanceRepository balanceRepository;
     private final PositionRepository positionRepository;
     private final TradeRepository tradeRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -95,18 +91,24 @@ public class LimitOrderMatchingService {
         Order order = orderRepository.findById(orderId).orElseThrow();
         VirtualAccount account = virtualAccountRepository.findByUserId(order.getUser().getId()).orElseThrow();
         
+        // 지정가 매수 시 사용된 통화의 잔고를 잠금 해제 및 차감
+        Balance balance = balanceRepository.findByAccountIdAndCurrencyWithLock(account.getId(), order.getCurrency())
+                .orElseThrow(() -> new RuntimeException("Balance not found"));
+        
         BigDecimal quantity = order.getQuantity();
         BigDecimal orderPrice = order.getPrice();
         
         BigDecimal lockedTotalAmount = orderPrice.multiply(quantity);
         BigDecimal lockedFee = BigDecimalUtil.formatKrw(lockedTotalAmount.multiply(FEE_RATE));
         BigDecimal lockedKrw = BigDecimalUtil.formatKrw(lockedTotalAmount.add(lockedFee));
-        account.unlockBalance(lockedKrw);
+        
+        balance.unlock(lockedKrw);
 
         BigDecimal actualTotalAmount = currentPrice.multiply(quantity);
         BigDecimal actualFee = BigDecimalUtil.formatKrw(actualTotalAmount.multiply(FEE_RATE));
         BigDecimal actualKrw = BigDecimalUtil.formatKrw(actualTotalAmount.add(actualFee));
-        account.decreaseBalance(actualKrw);
+        
+        balance.decreaseAvailable(actualKrw);
 
         Position position = positionRepository.findByUserIdAndUniversalCode(order.getUser().getId(), order.getUniversalCode())
                 .orElseGet(() -> Position.builder()
@@ -157,6 +159,9 @@ public class LimitOrderMatchingService {
 
         Order order = orderRepository.findById(orderId).orElseThrow();
         VirtualAccount account = virtualAccountRepository.findByUserId(order.getUser().getId()).orElseThrow();
+        Balance balance = balanceRepository.findByAccountIdAndCurrencyWithLock(account.getId(), order.getCurrency())
+                .orElseThrow(() -> new RuntimeException("Balance not found"));
+        
         Position position = positionRepository.findByUserIdAndUniversalCode(order.getUser().getId(), order.getUniversalCode()).orElseThrow();
 
         BigDecimal quantity = order.getQuantity();
@@ -170,7 +175,7 @@ public class LimitOrderMatchingService {
         BigDecimal realizedPnl = currentPrice.subtract(position.getAvgBuyPrice()).multiply(quantity);
         
         position.subtractPosition(currentPrice, quantity);
-        account.increaseBalance(expectedReturn);
+        balance.increaseAvailable(expectedReturn);
 
         Trade trade = Trade.builder()
                 .order(order)

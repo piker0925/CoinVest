@@ -36,6 +36,14 @@ public class Portfolio extends BaseEntity {
     private BigDecimal initialInvestment;
 
     /**
+     * 순 기여 금액 (기준 통화 기준).
+     * 초기 투자금 + 추가 입금 - 출금액 합계.
+     */
+    @Column(name = "net_contribution", nullable = false, precision = 20, scale = 4)
+    @Builder.Default
+    private BigDecimal netContribution = BigDecimal.ZERO;
+
+    /**
      * 포트폴리오 기준 통화 (KRW, USD 등).
      */
     @Enumerated(EnumType.STRING)
