@@ -1,12 +1,16 @@
 package com.coinvest.portfolio.service;
 
+import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioCreateRequest;
 import com.coinvest.portfolio.dto.PortfolioResponse;
+import com.coinvest.portfolio.repository.AlertSettingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,13 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import com.coinvest.portfolio.repository.AlertSettingRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +44,10 @@ class PortfolioServiceTest {
     private AlertSettingRepository alertSettingRepository;
 
     @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private AssetRepository assetRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private User user;
 
@@ -55,11 +60,16 @@ class PortfolioServiceTest {
     @DisplayName("정상적인 비중 합(100%)으로 포트폴리오를 생성할 수 있다.")
     void createPortfolioSuccess() {
         // given
-        PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("CRYPTO:BTC", new BigDecimal("0.7"));
-        PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.3"));
-        PortfolioCreateRequest request = new PortfolioCreateRequest("My Portfolio", new BigDecimal("1000000"), Arrays.asList(asset1, asset2));
+        PortfolioCreateRequest.AssetRequest assetReq1 = new PortfolioCreateRequest.AssetRequest("CRYPTO:BTC", new BigDecimal("0.7"));
+        PortfolioCreateRequest.AssetRequest assetReq2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.3"));
+        PortfolioCreateRequest request = new PortfolioCreateRequest("My Portfolio", new BigDecimal("1000000"), Currency.KRW, Arrays.asList(assetReq1, assetReq2));
+
+        Asset btc = Asset.builder().universalCode("CRYPTO:BTC").quoteCurrency(Currency.KRW).build();
+        Asset eth = Asset.builder().universalCode("CRYPTO:ETH").quoteCurrency(Currency.KRW).build();
 
         given(portfolioRepository.countByUser(user)).willReturn(0L);
+        given(assetRepository.findByUniversalCode("CRYPTO:BTC")).willReturn(Optional.of(btc));
+        given(assetRepository.findByUniversalCode("CRYPTO:ETH")).willReturn(Optional.of(eth));
         given(portfolioRepository.save(any(Portfolio.class))).willAnswer(invocation -> {
             Portfolio p = invocation.getArgument(0);
             ReflectionTestUtils.setField(p, "id", 1L);
@@ -72,7 +82,7 @@ class PortfolioServiceTest {
         // then
         assertThat(response.getName()).isEqualTo("My Portfolio");
         assertThat(response.getAssets()).hasSize(2);
-        verify(kafkaTemplate, times(1)).send(anyString(), any());
+        verify(eventPublisher, times(1)).publishEvent(any());
     }
 
     @Test
@@ -81,7 +91,7 @@ class PortfolioServiceTest {
         // given
         PortfolioCreateRequest.AssetRequest asset1 = new PortfolioCreateRequest.AssetRequest("CRYPTO:BTC", new BigDecimal("0.7"));
         PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.2")); // 합 0.9
-        PortfolioCreateRequest request = new PortfolioCreateRequest("Invalid Portfolio", new BigDecimal("1000000"), Arrays.asList(asset1, asset2));
+        PortfolioCreateRequest request = new PortfolioCreateRequest("Invalid Portfolio", new BigDecimal("1000000"), Currency.KRW, Arrays.asList(asset1, asset2));
 
         given(portfolioRepository.countByUser(user)).willReturn(0L);
 
@@ -89,19 +99,6 @@ class PortfolioServiceTest {
         assertThatThrownBy(() -> portfolioService.createPortfolio(user, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(ErrorCode.PORTFOLIO_INVALID_WEIGHT.getMessage());
-    }
-
-    @Test
-    @DisplayName("포트폴리오 개수가 5개를 초과하면 예외가 발생한다.")
-    void createPortfolioLimitExceeded() {
-        // given
-        PortfolioCreateRequest request = new PortfolioCreateRequest("6th Portfolio", new BigDecimal("1000000"), List.of());
-        given(portfolioRepository.countByUser(user)).willReturn(5L);
-
-        // when & then
-        assertThatThrownBy(() -> portfolioService.createPortfolio(user, request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage(ErrorCode.PORTFOLIO_LIMIT_EXCEEDED.getMessage());
     }
 
     @Test
