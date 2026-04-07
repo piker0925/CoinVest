@@ -50,7 +50,7 @@ public class AlertDispatcher {
         }
 
         String message = String.format("📢 [리밸런싱 알림] 포트폴리오 '%d'의 자산 비중이 임계치를 초과했습니다. 현재 평가액: %,.0f KRW",
-                valuation.getPortfolioId(), valuation.getTotalEvaluationKrw());
+                valuation.getPortfolioId(), valuation.getTotalEvaluationBase());
 
         // 1. Discord Webhook 발송
         discordClient.send(setting.getDiscordWebhookUrl(), message);

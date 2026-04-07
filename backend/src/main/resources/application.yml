@@ -22,6 +22,11 @@ spring:
     virtual:
       enabled: true
 
+jwt:
+  secret: ${JWT_SECRET:local_development_secret_key_random_string_at_least_64_chars_long_!!_secure_1234567890}
+  access-token-expiration: 3600000 # 1 hour
+  refresh-token-expiration: 1209600000 # 14 days
+
 trading:
   bot:
     enabled: false

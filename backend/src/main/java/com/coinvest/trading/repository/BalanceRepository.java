@@ -14,12 +14,13 @@ import java.util.Optional;
 public interface BalanceRepository extends JpaRepository<Balance, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT b FROM Balance b WHERE b.accountId = :accountId AND b.currency = :currency")
+    @Query("SELECT b FROM Balance b WHERE b.account.id = :accountId AND b.currency = :currency")
     Optional<Balance> findByAccountIdAndCurrencyWithLock(@Param("accountId") Long accountId, @Param("currency") Currency currency);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT b FROM Balance b WHERE b.accountId = :accountId AND b.currency IN :currencies ORDER BY b.currency ASC")
+    @Query("SELECT b FROM Balance b WHERE b.account.id = :accountId AND b.currency IN :currencies ORDER BY b.currency ASC")
     List<Balance> findAllByAccountIdAndCurrenciesWithLock(@Param("accountId") Long accountId, @Param("currencies") List<Currency> currencies);
 
-    List<Balance> findAllByAccountId(Long accountId);
+    @Query("SELECT b FROM Balance b WHERE b.account.id = :accountId")
+    List<Balance> findAllByAccountId(@Param("accountId") Long accountId);
 }

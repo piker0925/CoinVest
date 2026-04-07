@@ -17,6 +17,7 @@ public enum ErrorCode {
 	PORTFOLIO_INVALID_WEIGHT("자산 비중의 합은 반드시 100%여야 합니다", HttpStatus.BAD_REQUEST),
 	ALERT_NOT_FOUND("알림을 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 	USER_NOT_FOUND("사용자를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+	ASSET_NOT_FOUND("자산 정보를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
 	// Trading
 	TRADING_BALANCE_NOT_FOUND("해당 통화의 잔고를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
