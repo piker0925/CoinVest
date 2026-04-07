@@ -1,5 +1,4 @@
 -- V14: Trade 가시성 및 운영 데이터 보완
-ALTER TABLE trades ADD COLUMN exchange_rate_snapshot NUMERIC(20, 6);
 ALTER TABLE trades ADD COLUMN settlement_date DATE;
 
 -- 기존 데이터 업데이트 (기본값)

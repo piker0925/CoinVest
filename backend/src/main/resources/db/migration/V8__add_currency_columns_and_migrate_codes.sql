@@ -3,7 +3,7 @@
 -- 1. positions 테이블 변경
 ALTER TABLE positions ADD COLUMN currency VARCHAR(10) DEFAULT 'KRW' NOT NULL;
 ALTER TABLE positions RENAME COLUMN market_code TO universal_code;
-ALTER TABLE positions DROP CONSTRAINT positions_user_id_market_code_key;
+ALTER TABLE positions DROP CONSTRAINT IF EXISTS positions_user_id_market_code_key;
 ALTER TABLE positions ADD CONSTRAINT positions_user_id_universal_code_key UNIQUE (user_id, universal_code);
 -- 업비트 마켓 코드(KRW-BTC)를 범용 코드(CRYPTO:BTC)로 변환
 UPDATE positions SET universal_code = CONCAT('CRYPTO:', SUBSTRING(universal_code FROM 5)) WHERE universal_code LIKE 'KRW-%';
