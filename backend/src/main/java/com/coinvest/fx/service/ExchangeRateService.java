@@ -28,6 +28,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -45,26 +47,55 @@ public class ExchangeRateService {
     private static final int MAX_AGE_HOURS = 48;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
+    // 로컬 캐시 (N+1 방지)
+    private final Map<String, ExchangeRate> rateCache = new ConcurrentHashMap<>();
+
     @Value("${coinvest.alerts.system-webhook-url:}")
     private String systemWebhookUrl;
 
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
-    @Transactional(readOnly = true)
-    public BigDecimal getCurrentExchangeRate(Currency base, Currency quote) {
+    /**
+     * 환율 정보와 상태를 함께 반환. (평가 서비스용 - 정책 2-B 반영)
+     */
+    public ExchangeRateResponse getExchangeRateWithStatus(Currency base, Currency quote) {
         if (base == quote) {
-            return BigDecimal.ONE;
+            return new ExchangeRateResponse(BigDecimal.ONE, false);
         }
 
-        ExchangeRate rate = exchangeRateRepository.findFirstByBaseCurrencyAndQuoteCurrencyOrderByFetchedAtDesc(base, quote)
-                .orElseThrow(() -> new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED));
+        String cacheKey = base.name() + ":" + quote.name();
+        // 캐시 확인 후 없으면 DB 조회 (간단한 로컬 캐시)
+        ExchangeRate rate = rateCache.computeIfAbsent(cacheKey, k -> 
+            exchangeRateRepository.findFirstByBaseCurrencyAndQuoteCurrencyOrderByFetchedAtDesc(base, quote)
+                .orElse(null)
+        );
 
-        if (Duration.between(rate.getFetchedAt(), LocalDateTime.now()).toHours() > MAX_AGE_HOURS) {
-            log.error("Exchange rate stale (48h+): base={}, quote={}, last fetch={}", base, quote, rate.getFetchedAt());
+        if (rate == null) {
+            log.error("Exchange rate not found in DB: base={}, quote={}", base, quote);
             throw new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED);
         }
 
-        return rate.getRate();
+        boolean isStale = Duration.between(rate.getFetchedAt(), LocalDateTime.now()).toHours() > MAX_AGE_HOURS;
+        if (isStale) {
+            log.warn("Using stale exchange rate ({}h+): base={}, quote={}", MAX_AGE_HOURS, base, quote);
+        }
+
+        return new ExchangeRateResponse(rate.getRate(), isStale);
+    }
+
+    public record ExchangeRateResponse(BigDecimal rate, boolean isStale) {}
+
+    /**
+     * 엄격한 환율 조회. (거래 서비스용 - 정산 등 정확도가 생명인 곳)
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal getCurrentExchangeRate(Currency base, Currency quote) {
+        ExchangeRateResponse response = getExchangeRateWithStatus(base, quote);
+        if (response.isStale()) {
+            log.error("Strict exchange rate check failed due to staleness: base={}, quote={}", base, quote);
+            throw new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED);
+        }
+        return response.rate();
     }
 
     @Scheduled(cron = "0 30 9 * * MON-FRI")
@@ -82,6 +113,7 @@ public class ExchangeRateService {
                     .build();
 
             exchangeRateRepository.save(exchangeRate);
+            rateCache.put("USD:KRW", exchangeRate); // 캐시 갱신
             consecutiveFailures.set(0);
             log.info("Exchange rate (USD/KRW) fetched from KIS: {}", fetchedRate);
 
@@ -101,8 +133,6 @@ public class ExchangeRateService {
         String token = kisApiManager.getAccessToken();
         if (token == null) throw new RuntimeException("Failed to get KIS access token for exchange rate");
 
-        // KIS 해외주식 환율 조회 TR: FHKST03030100
-        // FID_COND_MRKT_DIV_CODE: FX, FID_INPUT_ISCD: FX@USDKRW (예시 규격)
         String uriStr = String.format("%s/uapi/overseas-stock/v1/quotations/inquire-daily-chartprice?FID_COND_MRKT_DIV_CODE=FX&FID_INPUT_ISCD=FX@USDKRW&FID_PERIOD_DIV_CODE=D&FID_ORG_ADJ_PRC=0",
                 kisApiManager.getBaseUrl());
 
@@ -123,10 +153,9 @@ public class ExchangeRateService {
         }
 
         JsonNode root = objectMapper.readTree(response.body());
-        JsonNode output = root.path("output1"); // 실시간 환율 정보가 포함된 필드 (명세에 따라 다름)
+        JsonNode output = root.path("output1"); 
         
         if (output.isMissingNode() || output.isNull()) {
-            // 차트 API의 경우 output2 배열의 첫 번째 값 사용
             JsonNode lastDay = root.path("output2").get(0);
             if (lastDay != null) {
                 return new BigDecimal(lastDay.path("stck_clpr").asText());

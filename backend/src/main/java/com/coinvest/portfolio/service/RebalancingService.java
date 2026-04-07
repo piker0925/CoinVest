@@ -1,4 +1,5 @@
 package com.coinvest.portfolio.service;
+import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
@@ -7,6 +8,7 @@ import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.dto.RebalancingProposal;
 import com.coinvest.portfolio.event.RebalanceAlertEvent;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
+import com.coinvest.trading.domain.Balance;
 import com.coinvest.trading.domain.VirtualAccount;
 import com.coinvest.trading.repository.VirtualAccountRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,18 +38,18 @@ public class RebalancingService {
     private final AlertSettingRepository alertSettingRepository;
     private final VirtualAccountRepository virtualAccountRepository;
     private final PortfolioValuationService valuationService;
+    private final ExchangeRateService exchangeRateService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final BigDecimal TOLERANCE = new BigDecimal("0.0001"); // 0.01%
-    private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");  // 업비트 기준 0.05%
+    private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");  // 기본 0.05%
 
     private static final String ALERT_COOLDOWN_KEY = "alert:cooldown:%d";
     private static final String ALERT_DAILY_COUNT_KEY = "alert:daily-count:%d";
     private static final int MAX_DAILY_ALERTS = 20;
 
     /**
-...
      * 편차 검사 및 알림 필요 여부 확인 후 이벤트 발행.
      */
     public void processAlertTrigger(PortfolioValuation valuation) {
@@ -91,7 +93,7 @@ public class RebalancingService {
     }
 
     /**
-     * 편차 검사 및 알림 필요 여부 확인.
+     * 리밸런싱 시뮬레이션 수행.
      */
     public List<RebalancingProposal> simulateRebalancing(Long portfolioId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
@@ -104,7 +106,15 @@ public class RebalancingService {
         if (valuation == null) return new ArrayList<>();
 
         List<RebalancingProposal> proposals = new ArrayList<>();
-        BigDecimal totalPositionValue = valuation.getTotalEvaluationKrw();
+        BigDecimal totalEvaluationBase = valuation.getTotalEvaluationBase();
+
+        // 총 Buying Power (기준 통화 환산)
+        BigDecimal totalBuyingPowerBase = BigDecimal.ZERO;
+        for (Balance balance : account.getBalances()) {
+            // 시뮬레이션에서도 stale 환율 허용 (Policy 2-B)
+            BigDecimal fxRate = exchangeRateService.getExchangeRateWithStatus(balance.getCurrency(), valuation.getBaseCurrency()).rate();
+            totalBuyingPowerBase = totalBuyingPowerBase.add(balance.getAvailableForPurchase().multiply(fxRate));
+        }
 
         for (PortfolioValuation.AssetValuation av : valuation.getAssetValuations()) {
             BigDecimal currentWeight = av.getCurrentWeight() != null ? av.getCurrentWeight() : BigDecimal.ZERO;
@@ -116,18 +126,25 @@ public class RebalancingService {
 
             // 편차가 허용 범위를 초과하는 경우
             if (deviation.abs().compareTo(TOLERANCE) > 0) {
-                // 목표 평가액 = 총 포지션 가치 * 목표 비중
-                BigDecimal targetEvaluationKrw = totalPositionValue.multiply(targetWeight);
-                BigDecimal diffAmount = targetEvaluationKrw.subtract(av.getCurrentEvaluationKrw());
+                // 목표 평가액 (기준 통화) = 총 포트폴리오 가치 * 목표 비중
+                BigDecimal targetEvaluationBase = totalEvaluationBase.multiply(targetWeight);
+                BigDecimal diffAmountBase = targetEvaluationBase.subtract(av.getEvaluationBase());
 
-                if (diffAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    // 매수 필요
+                if (diffAmountBase.compareTo(BigDecimal.ZERO) > 0) {
+                    // 매수 필요 (기준 통화 -> 자산 통화 환산 필요)
                     action = RebalancingProposal.Action.BUY;
-                    proposedQuantity = calculateProposedBuyQuantity(diffAmount, av.getCurrentPrice(), account.getAvailableBalance());
-                } else if (diffAmount.compareTo(BigDecimal.ZERO) < 0) {
+                    proposedQuantity = calculateProposedBuyQuantity(
+                            diffAmountBase, 
+                            av.getCurrentPrice(), 
+                            av.getFxRate(), 
+                            totalBuyingPowerBase
+                    );
+                } else if (diffAmountBase.compareTo(BigDecimal.ZERO) < 0) {
                     // 매도 필요
                     action = RebalancingProposal.Action.SELL;
-                    proposedQuantity = diffAmount.abs().divide(av.getCurrentPrice(), 8, RoundingMode.HALF_UP);
+                    // 자산 수량 = 기준 통화 차이 / (자산 가격 * 환율)
+                    BigDecimal priceInBase = av.getCurrentPrice().multiply(av.getFxRate());
+                    proposedQuantity = diffAmountBase.abs().divide(priceInBase, 8, RoundingMode.HALF_UP);
                     // 실제 보유 수량보다 많이 팔 수 없음 (정합성 보장)
                     proposedQuantity = proposedQuantity.min(av.getQuantity());
                 }
@@ -175,18 +192,27 @@ public class RebalancingService {
     }
 
     /**
-     * 가용 잔고를 고려한 매수 제안 수량 계산.
+     * 가용 잔고(Buying Power)를 고려한 매수 제안 수량 계산.
+     * 모든 금액은 기준 통화(Base)로 환산하여 계산함.
      */
-    private BigDecimal calculateProposedBuyQuantity(BigDecimal diffAmount, BigDecimal currentPrice, BigDecimal availableKrw) {
-        if (currentPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
+    private BigDecimal calculateProposedBuyQuantity(
+            BigDecimal diffAmountBase, 
+            BigDecimal currentPriceNative, 
+            BigDecimal fxRate, 
+            BigDecimal totalBuyingPowerBase) {
+        
+        if (currentPriceNative.compareTo(BigDecimal.ZERO) == 0 || fxRate.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
 
-        // 1. 순수하게 비중을 맞추기 위해 필요한 수량
-        BigDecimal requiredQty = diffAmount.divide(currentPrice, 8, RoundingMode.HALF_UP);
+        // 1. 비중을 맞추기 위해 필요한 수량 (Price in Base = Price Native * FxRate)
+        BigDecimal priceInBase = currentPriceNative.multiply(fxRate);
+        BigDecimal requiredQty = diffAmountBase.divide(priceInBase, 8, RoundingMode.HALF_UP);
 
-        // 2. 가용 잔고로 살 수 있는 최대 수량 (수수료 포함)
-        // Max Qty = Available / (Price * (1 + Fee))
-        BigDecimal maxAffordableQty = availableKrw.divide(
-                currentPrice.multiply(BigDecimal.ONE.add(FEE_RATE)), 8, RoundingMode.DOWN);
+        // 2. 통합 증거금(Buying Power)으로 살 수 있는 최대 수량 (수수료 포함)
+        // Max Qty = TotalBuyingPowerBase / (PriceInBase * (1 + Fee))
+        BigDecimal maxAffordableQty = totalBuyingPowerBase.divide(
+                priceInBase.multiply(BigDecimal.ONE.add(FEE_RATE)), 8, RoundingMode.DOWN);
 
         return requiredQty.min(maxAffordableQty);
     }

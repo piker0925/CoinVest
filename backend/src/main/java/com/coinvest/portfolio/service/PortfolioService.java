@@ -1,5 +1,7 @@
 package com.coinvest.portfolio.service;
 
+import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
@@ -30,6 +32,7 @@ public class PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
     private final AlertSettingRepository alertSettingRepository;
+    private final AssetRepository assetRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final int MAX_PORTFOLIO_COUNT = 5;
@@ -50,14 +53,19 @@ public class PortfolioService {
         // 3. 엔티티 생성 및 저장
         Portfolio portfolio = Portfolio.builder()
                 .name(request.getName())
-                .initialInvestmentKrw(request.getInitialInvestmentKrw())
+                .initialInvestment(request.getInitialInvestment())
+                .baseCurrency(request.getBaseCurrency())
                 .user(user)
                 .build();
 
         request.getAssets().forEach(assetReq -> {
+            Asset assetMaster = assetRepository.findByUniversalCode(assetReq.getUniversalCode())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
+
             PortfolioAsset asset = PortfolioAsset.builder()
                     .universalCode(assetReq.getUniversalCode())
                     .targetWeight(assetReq.getTargetWeight())
+                    .currency(assetMaster.getQuoteCurrency())
                     .quantity(BigDecimal.ZERO) // 초기 수량은 0
                     .build();
             portfolio.addAsset(asset);
@@ -107,20 +115,24 @@ public class PortfolioService {
         validateTotalWeight(request.getAssets());
 
         // 2. 기본 정보 수정
-        portfolio.update(request.getName(), portfolio.getInitialInvestmentKrw());
+        portfolio.update(request.getName(), portfolio.getInitialInvestment(), portfolio.getBaseCurrency());
 
         // 3. 자산 교체 (Orphan Removal 기반)
         portfolio.getAssets().clear();
         request.getAssets().forEach(assetReq -> {
+            Asset assetMaster = assetRepository.findByUniversalCode(assetReq.getUniversalCode())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
+
             PortfolioAsset asset = PortfolioAsset.builder()
                     .universalCode(assetReq.getUniversalCode())
                     .targetWeight(assetReq.getTargetWeight())
+                    .currency(assetMaster.getQuoteCurrency())
                     .quantity(BigDecimal.ZERO)
                     .build();
             portfolio.addAsset(asset);
         });
 
-        // 4. Kafka 이벤트 발행
+        // 4. Kafka 이벤트 발행 (실제는 Redis/Spring Event)
         publishPortfolioEvent(portfolio, PortfolioUpdatedEvent.UpdateType.UPDATE);
 
         return PortfolioResponse.from(portfolio);
