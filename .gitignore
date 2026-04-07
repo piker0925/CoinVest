@@ -35,6 +35,8 @@ out/
 .env
 .env.local
 .env.*.local
+*-local.yml
+*-local.properties
 
 # Logs
 logs/
