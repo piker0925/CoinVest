@@ -1,5 +1,6 @@
 package com.coinvest.portfolio.dto;
 
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
 import lombok.AllArgsConstructor;
@@ -22,7 +23,8 @@ public class PortfolioResponse {
 
     private Long id;
     private String name;
-    private BigDecimal initialInvestmentKrw;
+    private BigDecimal initialInvestment;
+    private Currency baseCurrency;
     private List<AssetResponse> assets;
 
     @Getter
@@ -47,7 +49,8 @@ public class PortfolioResponse {
         return PortfolioResponse.builder()
                 .id(portfolio.getId())
                 .name(portfolio.getName())
-                .initialInvestmentKrw(portfolio.getInitialInvestmentKrw())
+                .initialInvestment(portfolio.getInitialInvestment())
+                .baseCurrency(portfolio.getBaseCurrency())
                 .assets(portfolio.getAssets().stream()
                         .map(AssetResponse::from)
                         .collect(Collectors.toList()))

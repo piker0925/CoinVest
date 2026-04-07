@@ -1,6 +1,7 @@
 package com.coinvest.portfolio.domain;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -29,10 +30,18 @@ public class Portfolio extends BaseEntity {
     private String name;
 
     /**
-     * 초기 투자 금액 (KRW).
+     * 초기 투자 금액 (기준 통화 기준).
      */
-    @Column(name = "initial_investment_krw", nullable = false, precision = 20, scale = 4)
-    private BigDecimal initialInvestmentKrw;
+    @Column(name = "initial_investment", nullable = false, precision = 20, scale = 4)
+    private BigDecimal initialInvestment;
+
+    /**
+     * 포트폴리오 기준 통화 (KRW, USD 등).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "base_currency", nullable = false, length = 10)
+    @Builder.Default
+    private Currency baseCurrency = Currency.KRW;
 
     /**
      * 낙관적 락을 위한 버전 관리.
@@ -60,8 +69,9 @@ public class Portfolio extends BaseEntity {
     /**
      * 포트폴리오 정보 수정.
      */
-    public void update(String name, BigDecimal initialInvestmentKrw) {
+    public void update(String name, BigDecimal initialInvestment, Currency baseCurrency) {
         this.name = name;
-        this.initialInvestmentKrw = initialInvestmentKrw;
+        this.initialInvestment = initialInvestment;
+        this.baseCurrency = baseCurrency;
     }
 }

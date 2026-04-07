@@ -1,5 +1,6 @@
 package com.coinvest.portfolio.domain;
 
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -28,6 +29,14 @@ public class PortfolioAsset extends BaseEntity {
     private String universalCode;
 
     /**
+     * 자산의 기준 통화 (Quote Currency).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private Currency currency = Currency.KRW;
+
+    /**
      * 목표 비중 (0.0 ~ 1.0).
      */
     @Column(name = "target_weight", nullable = false, precision = 5, scale = 4)
@@ -53,8 +62,9 @@ public class PortfolioAsset extends BaseEntity {
     /**
      * 자산 정보 업데이트.
      */
-    public void update(BigDecimal targetWeight, BigDecimal quantity) {
+    public void update(BigDecimal targetWeight, BigDecimal quantity, Currency currency) {
         this.targetWeight = targetWeight;
         this.quantity = quantity;
+        this.currency = currency;
     }
 }
