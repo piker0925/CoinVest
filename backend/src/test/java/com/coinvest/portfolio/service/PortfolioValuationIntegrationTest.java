@@ -1,11 +1,13 @@
 package com.coinvest.portfolio.service;
 
+import com.coinvest.AbstractIntegrationTest;
 import com.coinvest.auth.domain.AuthProvider;
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.auth.domain.UserRole;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
@@ -19,9 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -29,13 +29,15 @@ import java.util.ArrayList;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest
-@ActiveProfiles("local")
+/**
+ * 포트폴리오 가치 평가 통합 테스트.
+ */
 @Transactional
-class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegrationTest {
+class PortfolioValuationIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private PortfolioValuationService valuationService;
@@ -59,11 +61,12 @@ class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegration
     private EntityManager em;
 
     private Long testPortfolioId;
+    private User testUser;
 
     @BeforeEach
     void setUp() {
-        // 1. 유저 생성 (JPA 레벨에서 확실히)
-        User user = User.builder()
+        // 1. 유저 생성
+        testUser = User.builder()
                 .email("valuation@test.com")
                 .password("password")
                 .nickname("tester")
@@ -71,16 +74,15 @@ class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegration
                 .authProvider(AuthProvider.LOCAL)
                 .isActive(true)
                 .build();
-        userRepository.save(user);
+        userRepository.save(testUser);
 
         // 2. 가상 계좌 및 잔고 생성
         VirtualAccount account = VirtualAccount.builder()
-                .user(user)
+                .user(testUser)
                 .balances(new ArrayList<>())
                 .build();
         virtualAccountRepository.save(account);
 
-        // 초기 KRW 잔고 추가 (Buying Power 테스트용)
         Balance krwBalance = Balance.builder()
                 .account(account)
                 .currency(Currency.KRW)
@@ -91,12 +93,13 @@ class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegration
         account.getBalances().add(krwBalance);
         virtualAccountRepository.save(account);
 
-        // 3. 포트폴리오 생성
+        // 3. 포트폴리오 생성 (PriceMode.DEMO 자동 할당 예정 - Role=USER)
         Portfolio portfolio = Portfolio.builder()
                 .name("Test Portfolio")
                 .initialInvestment(new BigDecimal("1000000"))
                 .baseCurrency(Currency.KRW)
-                .user(user)
+                .user(testUser)
+                .priceMode(PriceMode.DEMO)
                 .build();
         portfolioRepository.save(portfolio);
         
@@ -126,16 +129,21 @@ class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegration
         krwBalance.deposit(new BigDecimal("1000000"));
         virtualAccountRepository.saveAndFlush(account);
 
-        // Mock Prices & FX
-        when(priceService.getPrices(anyList())).thenReturn(Map.of(
+        // Mock Prices & FX (PriceMode 인자 추가 반영)
+        when(priceService.getPrices(anyList(), any(PriceMode.class))).thenReturn(Map.of(
                 "CRYPTO:BTC", new BigDecimal("100000000"),
                 "US_STOCK:AAPL", new BigDecimal("200")
         ));
         
-        when(exchangeRateService.getExchangeRateWithStatus(Currency.KRW, Currency.KRW))
-                .thenReturn(new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false));
-        when(exchangeRateService.getExchangeRateWithStatus(Currency.USD, Currency.KRW))
-                .thenReturn(new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), false));
+        when(exchangeRateService.getExchangeRateWithStatus(any(Currency.class), any(Currency.class), any(PriceMode.class)))
+                .thenAnswer(invocation -> {
+                    Currency base = invocation.getArgument(0);
+                    Currency quote = invocation.getArgument(1);
+                    if (base == quote) return new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false);
+                    if (base == Currency.USD && quote == Currency.KRW) 
+                        return new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), false);
+                    return null;
+                });
 
         // [When]
         PortfolioValuation result = valuationService.evaluate(testPortfolioId, Currency.KRW);
@@ -159,7 +167,8 @@ class PortfolioValuationIntegrationTest extends com.coinvest.AbstractIntegration
                 .build());
         portfolioRepository.saveAndFlush(portfolio);
 
-        when(exchangeRateService.getExchangeRateWithStatus(any(), any()))
+        when(priceService.getPrices(anyList(), any(PriceMode.class))).thenReturn(Map.of("US_STOCK:AAPL", new BigDecimal("200")));
+        when(exchangeRateService.getExchangeRateWithStatus(any(), any(), any()))
                 .thenReturn(new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), true));
 
         // [When]

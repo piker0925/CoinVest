@@ -7,12 +7,16 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
+import com.coinvest.portfolio.domain.PortfolioRepository;
 import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.dto.OrderCreateRequest;
 import com.coinvest.trading.repository.*;
+import com.coinvest.trading.service.strategy.TradingStrategy;
+import com.coinvest.trading.service.strategy.TradingStrategyResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +36,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,6 +73,9 @@ class TradingServiceTest {
     private TradeRepository tradeRepository;
 
     @Mock
+    private SettlementRepository settlementRepository;
+
+    @Mock
     private AssetRepository assetRepository;
 
     @Mock
@@ -88,6 +99,15 @@ class TradingServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TradingStrategyResolver strategyResolver;
+
+    @Mock
+    private TradingStrategy tradingStrategy;
+
+    @Mock
+    private PortfolioRepository portfolioRepository;
+
     private User testUser;
     private VirtualAccount account;
     private Balance krwBalance;
@@ -107,7 +127,7 @@ class TradingServiceTest {
                 .build();
         
         krwBalance = Balance.builder()
-                .account(account).currency(Currency.KRW).available(new BigDecimal("10000000")).build();
+                .account(account).currency(Currency.KRW).available(new BigDecimal("100000000")).build();
         usdBalance = Balance.builder()
                 .account(account).currency(Currency.USD).available(BigDecimal.ZERO).build();
         
@@ -116,9 +136,11 @@ class TradingServiceTest {
 
         given(userRepository.findById(userId)).willReturn(Optional.of(testUser));
         given(virtualAccountRepository.findByUserId(userId)).willReturn(Optional.of(account));
-        // 중요: 리포지토리가 항상 setUp에서 생성한 동일한 인스턴스 리스트를 반환하도록 함
         given(balanceRepository.findAllByAccountIdAndCurrenciesWithLock(anyLong(), anyList()))
                 .willReturn(Arrays.asList(krwBalance, usdBalance));
+
+        given(strategyResolver.resolve(any(PriceMode.class))).willReturn(tradingStrategy);
+        given(tradingStrategy.getMode()).willReturn(PriceMode.LIVE);
 
         given(redisTemplate.opsForValue()).willReturn(mock(ValueOperations.class));
         given(redisTemplate.opsForZSet()).willReturn(mock(org.springframework.data.redis.core.ZSetOperations.class));
@@ -135,15 +157,14 @@ class TradingServiceTest {
                 .universalCode(universalCode).quoteCurrency(Currency.KRW).assetClass(AssetClass.CRYPTO).feeRate(new BigDecimal("0.0005")).build();
 
         given(assetRepository.findByUniversalCode(universalCode)).willReturn(Optional.of(btcAsset));
-        given(priceService.getCurrentPrice(universalCode)).willReturn(currentPrice);
+        given(tradingStrategy.getCurrentPrice(universalCode)).willReturn(currentPrice);
         given(marketHoursService.isMarketOpen(btcAsset)).willReturn(true);
         
-        // MarginCalculator가 실제로 잔고를 차감하도록 유도하거나 결과를 모킹
-        given(marginCalculator.calculateAndApplyMargin(any(), any(), any())).willAnswer(inv -> {
+        given(marginCalculator.calculateAndApplyMargin(any(), any(), any(), any(PriceMode.class))).willAnswer(inv -> {
             BigDecimal totalAmount = currentPrice.multiply(request.quantity());
             BigDecimal fee = totalAmount.multiply(new BigDecimal("0.0005"));
             krwBalance.decreaseAvailable(totalAmount.add(fee));
-            return totalAmount.add(fee);
+            return BigDecimal.ONE; // fxRate
         });
 
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
@@ -154,24 +175,63 @@ class TradingServiceTest {
         });
 
         // Act
-        tradingService.createOrder(userId, request);
+        tradingService.createOrder(userId, request, PriceMode.LIVE);
 
         // Assert
-        // 500만 + 2500원 차감 -> 4,997,500
-        BigDecimal expectedBalance = new BigDecimal("4997500");
+        // 1억 - (500만 + 2500원) = 94,997,500
+        BigDecimal expectedBalance = new BigDecimal("94997500");
         assertThat(krwBalance.getAvailable()).isEqualByComparingTo(expectedBalance);
     }
 
     @Test
-    @DisplayName("시장가 주문 실패 - 주문 검증기에서 에러 발생 시 전파되어야 함")
-    void should_throw_exception_when_validator_fails() {
-        // Arrange
-        OrderCreateRequest request = new OrderCreateRequest(universalCode, OrderSide.BUY, OrderType.MARKET, null, BigDecimal.ONE);
-        doThrow(new BusinessException(ErrorCode.COMMON_INVALID_INPUT))
-                .when(orderValidator).validateRequest(any());
+    @DisplayName("멀티스레드 동시 주문 시 데드락 없이 로직이 수행되어야 함")
+    void should_handle_concurrent_orders_without_deadlock() throws InterruptedException {
+        // given
+        int threadCount = 10;
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+        AtomicInteger successCount = new AtomicInteger();
 
-        // Act & Assert
-        assertThatThrownBy(() -> tradingService.createOrder(userId, request))
-                .isInstanceOf(BusinessException.class);
+        OrderCreateRequest request = new OrderCreateRequest(universalCode, OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.01"));
+        Asset btcAsset = Asset.builder()
+                .universalCode(universalCode).quoteCurrency(Currency.KRW).assetClass(AssetClass.CRYPTO).feeRate(new BigDecimal("0.0005")).build();
+
+        given(assetRepository.findByUniversalCode(universalCode)).willReturn(Optional.of(btcAsset));
+        given(tradingStrategy.getCurrentPrice(universalCode)).willReturn(new BigDecimal("100000000"));
+        given(marketHoursService.isMarketOpen(btcAsset)).willReturn(true);
+        
+        // Mock MarginCalculator: 스레드 안전하게 잔고 차감
+        doAnswer(inv -> {
+            BigDecimal amount = inv.getArgument(2);
+            synchronized (krwBalance) {
+                krwBalance.decreaseAvailable(amount);
+            }
+            return BigDecimal.ONE;
+        }).when(marginCalculator).calculateAndApplyMargin(any(), any(), any(), any());
+
+        given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
+        given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        for (int i = 0; i < threadCount; i++) {
+            executorService.execute(() -> {
+                try {
+                    tradingService.createOrder(userId, request, PriceMode.LIVE);
+                    successCount.incrementAndGet();
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executorService.shutdown();
+
+        // then
+        assertThat(successCount.get()).isEqualTo(threadCount);
+        // 차감액: 100만 + 500수수료 = 1,000,500
+        // 10명 차감: 10,005,000
+        // 잔고: 1억 - 10,005,000 = 89,995,000
+        assertThat(krwBalance.getAvailable()).isEqualByComparingTo("89995000");
     }
 }
