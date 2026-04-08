@@ -99,6 +99,40 @@ public class MarketHoursService {
         };
     }
 
+    /**
+     * 한국 거래소(KRX) 개장 여부 확인.
+     */
+    public boolean isKrxOpen() {
+        return isExchangeOpen(Exchange.KRX);
+    }
+
+    /**
+     * 뉴욕 거래소(NYSE) 개장 여부 확인.
+     */
+    public boolean isNyseOpen() {
+        return isExchangeOpen(Exchange.NYSE);
+    }
+
+    private boolean isExchangeOpen(Exchange exchange) {
+        if (exchange == Exchange.UPBIT) return true;
+
+        ZonedDateTime now = getZonedDateTime(exchange);
+        if (now.getDayOfWeek() == DayOfWeek.SATURDAY || now.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            return false;
+        }
+        if (calendarRepository.existsByExchangeAndHolidayDate(exchange, now.toLocalDate())) {
+            return false;
+        }
+
+        LocalTime time = now.toLocalTime();
+        if (exchange == Exchange.KRX) {
+            return !time.isBefore(KRX_OPEN) && !time.isAfter(KRX_CLOSE);
+        } else if (exchange == Exchange.NYSE) {
+            return !time.isBefore(NYSE_OPEN) && !time.isAfter(NYSE_CLOSE);
+        }
+        return false;
+    }
+
     private ZonedDateTime getZonedDateTime(Exchange exchange) {
         return switch (exchange) {
             case UPBIT, KRX -> ZonedDateTime.now(KST);

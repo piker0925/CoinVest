@@ -18,6 +18,8 @@ public final class RedisKeyConstants {
     private static final String ALERT_COOLDOWN_TEMPLATE = "alert:cooldown:%d:%s";
     private static final String ALERT_DAILY_COUNT_TEMPLATE = "alert:daily-count:%d";
     private static final String LIMIT_ORDER_TEMPLATE = "trading:limit-order:%s:%s";
+    private static final String BENCHMARK_TEMPLATE = "benchmark:%s";
+    private static final String BENCHMARK_HISTORY_TEMPLATE = "benchmark:history:%s";
 
     // --- Common ---
     public static final String LOGIN_FAIL_COUNT_KEY = "auth:login-fail:%s";
@@ -54,6 +56,14 @@ public final class RedisKeyConstants {
 
     public static String getLimitOrderKey(PriceMode mode, String side, String universalCode) {
         return mode.getPrefixKey(String.format(LIMIT_ORDER_TEMPLATE, side.toLowerCase(), universalCode));
+    }
+
+    public static String getBenchmarkKey(PriceMode mode, String code) {
+        return mode.getPrefixKey(String.format(BENCHMARK_TEMPLATE, code));
+    }
+
+    public static String getBenchmarkHistoryKey(PriceMode mode, String code) {
+        return mode.getPrefixKey(String.format(BENCHMARK_HISTORY_TEMPLATE, code));
     }
 
     public static String format(String format, Object... args) {
