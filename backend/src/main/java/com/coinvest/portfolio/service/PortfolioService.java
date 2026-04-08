@@ -3,6 +3,8 @@ package com.coinvest.portfolio.service;
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.*;
@@ -50,13 +52,16 @@ public class PortfolioService {
         // 2. 비중 합 검증 (100% 여부)
         validateTotalWeight(request.getAssets());
 
-        // 3. 엔티티 생성 및 저장
+        // 3. 엔티티 생성 및 저장 (유저 권한에 따른 PriceMode 할당)
+        PriceMode mode = PriceModeResolver.resolve(user.getRole());
+
         Portfolio portfolio = Portfolio.builder()
                 .name(request.getName())
                 .initialInvestment(request.getInitialInvestment())
                 .netContribution(request.getInitialInvestment())
                 .baseCurrency(request.getBaseCurrency())
                 .user(user)
+                .priceMode(mode)
                 .build();
 
         request.getAssets().forEach(assetReq -> {
@@ -67,7 +72,7 @@ public class PortfolioService {
                     .universalCode(assetReq.getUniversalCode())
                     .targetWeight(assetReq.getTargetWeight())
                     .currency(assetMaster.getQuoteCurrency())
-                    .quantity(BigDecimal.ZERO) // 초기 수량은 0
+                    .quantity(BigDecimal.ZERO)
                     .build();
             portfolio.addAsset(asset);
         });
@@ -133,7 +138,7 @@ public class PortfolioService {
             portfolio.addAsset(asset);
         });
 
-        // 4. Kafka 이벤트 발행 (실제는 Redis/Spring Event)
+        // 4. 이벤트 발행
         publishPortfolioEvent(portfolio, PortfolioUpdatedEvent.UpdateType.UPDATE);
 
         return PortfolioResponse.from(portfolio);
@@ -158,7 +163,6 @@ public class PortfolioService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
 
         if (!portfolio.getUser().getId().equals(user.getId())) {
-            // 타인의 리소스 접근 시 존재하지 않는 것처럼 응답하여 보안 강화 (ADR 기록 예정)
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
         return portfolio;
@@ -172,7 +176,6 @@ public class PortfolioService {
                 .map(PortfolioCreateRequest.AssetRequest::getTargetWeight)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // BigDecimal 비교 시 오차를 고려하지 않고 정확히 1.0000이어야 함 (0.0001 단위 정밀도)
         if (totalWeight.compareTo(BigDecimal.ONE) != 0) {
             throw new BusinessException(ErrorCode.PORTFOLIO_INVALID_WEIGHT);
         }

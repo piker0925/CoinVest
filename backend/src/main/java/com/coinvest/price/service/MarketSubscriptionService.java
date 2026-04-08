@@ -3,6 +3,7 @@ package com.coinvest.price.service;
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.domain.AssetClass;
 import com.coinvest.asset.repository.AssetRepository;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
@@ -54,8 +55,10 @@ public class MarketSubscriptionService {
                 .distinct()
                 .collect(Collectors.toList());
 
+        // isDemo = false인 실제 자산만 필터링하여 구독 요청
         List<Asset> assets = assetRepository.findAll().stream()
                 .filter(a -> universalCodes.contains(a.getUniversalCode()))
+                .filter(a -> !a.isDemo())
                 .collect(Collectors.toList());
 
         // 1. Upbit WebSocket 구독 갱신 (CRYPTO 전용)
@@ -64,7 +67,7 @@ public class MarketSubscriptionService {
                 .collect(Collectors.toList());
         upbitPriceProvider.subscribe(cryptoAssets);
 
-        log.info("Refreshed price subscriptions for {} assets ({} crypto)", assets.size(), cryptoAssets.size());
+        log.info("Refreshed price subscriptions for {} real assets ({} crypto)", assets.size(), cryptoAssets.size());
     }
 
     /**
@@ -78,18 +81,20 @@ public class MarketSubscriptionService {
                 .distinct()
                 .collect(Collectors.toList());
 
+        // isDemo = false인 실제 자산만 폴링
         List<Asset> assetsToPoll = assetRepository.findAll().stream()
                 .filter(a -> universalCodes.contains(a.getUniversalCode()))
+                .filter(a -> !a.isDemo())
                 .filter(a -> a.getAssetClass() != AssetClass.CRYPTO)
                 .collect(Collectors.toList());
 
         if (assetsToPoll.isEmpty()) return;
 
-        log.info("Polling prices for {} assets", assetsToPoll.size());
+        log.info("Polling prices for {} real assets", assetsToPoll.size());
         List<TickerEvent> events = priceProviderRouter.fetchPrices(assetsToPoll);
 
         for (TickerEvent event : events) {
-            redisTemplate.convertAndSend(RedisKeyConstants.PRICE_TICKER_CHANNEL, event);
+            redisTemplate.convertAndSend(RedisKeyConstants.getPriceTickerChannel(PriceMode.LIVE), event);
         }
     }
 }

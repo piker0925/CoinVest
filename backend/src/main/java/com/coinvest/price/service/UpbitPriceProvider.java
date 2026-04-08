@@ -2,6 +2,7 @@ package com.coinvest.price.service;
 
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.domain.AssetClass;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.price.dto.TickerEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,7 +67,6 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
 
     @Override
     public List<TickerEvent> fetchPrices(List<Asset> assets) {
-        // WebSocket 기반이므로 폴링 조사는 지원하지 않음
         return List.of();
     }
 
@@ -110,9 +110,6 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
         scheduler.shutdown();
     }
 
-    /**
-     * 특정 자산 목록 구독.
-     */
     public void subscribe(List<Asset> assets) {
         this.currentAssets = assets;
         this.externalCodeMap.clear();
@@ -158,8 +155,6 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
             data.get(bytes);
             String message = new String(bytes, StandardCharsets.UTF_8);
 
-            // Upbit 전용 매핑을 위해 내부 익명 클래스 혹은 별도 DTO 사용 가능하지만, 
-            // 여기서는 TickerEvent의 marketCode 필드를 활용
             TickerEvent upbitEvent = objectMapper.readValue(message, TickerEvent.class);
             Asset asset = externalCodeMap.get(upbitEvent.getMarketCode());
             
@@ -175,8 +170,8 @@ public class UpbitPriceProvider implements PriceProvider, WebSocket.Listener {
                         .tradeTimestamp(upbitEvent.getTradeTimestamp())
                         .build();
 
-                // universalCode를 키로 하여 Redis Pub/Sub 발행
-                redisTemplate.convertAndSend(RedisKeyConstants.PRICE_TICKER_CHANNEL, event);
+                // LIVE 채널 고정 발행
+                redisTemplate.convertAndSend(RedisKeyConstants.getPriceTickerChannel(PriceMode.LIVE), event);
             }
 
         } catch (Exception e) {

@@ -3,6 +3,7 @@ package com.coinvest.portfolio.domain;
 import com.coinvest.auth.domain.User;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
+import com.coinvest.global.common.PriceMode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -52,6 +53,14 @@ public class Portfolio extends BaseEntity {
     private Currency baseCurrency = Currency.KRW;
 
     /**
+     * 실행 모드 (LIVE, DEMO).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_mode", nullable = false, length = 20)
+    @Builder.Default
+    private PriceMode priceMode = PriceMode.LIVE;
+
+    /**
      * 낙관적 락을 위한 버전 관리.
      * 동시 수정 방지.
      */
@@ -72,6 +81,14 @@ public class Portfolio extends BaseEntity {
     public void addAsset(PortfolioAsset asset) {
         this.assets.add(asset);
         asset.assignPortfolio(this);
+    }
+
+    /**
+     * 입금/출금에 따른 순 기여 금액 업데이트.
+     * @param amount 입금액(+), 출금액(-)
+     */
+    public void updateContribution(BigDecimal amount) {
+        this.netContribution = this.netContribution.add(amount);
     }
 
     /**
