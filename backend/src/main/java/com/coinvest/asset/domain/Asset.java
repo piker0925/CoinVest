@@ -41,4 +41,8 @@ public class Asset extends BaseEntity {
 
     @Column(nullable = false, precision = 10, scale = 6)
     private BigDecimal feeRate;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean isDemo = false;
 }
