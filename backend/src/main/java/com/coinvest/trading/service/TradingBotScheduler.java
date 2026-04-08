@@ -3,6 +3,8 @@ package com.coinvest.trading.service;
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.auth.domain.UserRole;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.trading.domain.OrderSide;
 import com.coinvest.trading.domain.OrderType;
 import com.coinvest.trading.dto.OrderCreateRequest;
@@ -34,7 +36,7 @@ public class TradingBotScheduler {
     private final TradingService tradingService;
     private final RedisTemplate<String, Object> redisTemplate;
     
-    private final List<Long> cachedBotUserIds = new ArrayList<>();
+    private final List<User> cachedBotUsers = new ArrayList<>();
     private final Random random = new Random();
     
     private static final List<String> TARGET_MARKETS = Arrays.asList("KRW-BTC", "KRW-ETH", "KRW-XRP");
@@ -49,22 +51,21 @@ public class TradingBotScheduler {
                 .filter(u -> u.getEmail() != null && u.getEmail().startsWith("bot_"))
                 .collect(Collectors.toList());
                 
-        for (User bot : botUsers) {
-            cachedBotUserIds.add(bot.getId());
-        }
+        cachedBotUsers.addAll(botUsers);
         
-        log.info("TradingBotScheduler initialized. Cached {} bot users.", cachedBotUserIds.size());
+        log.info("TradingBotScheduler initialized. Cached {} bot users.", cachedBotUsers.size());
     }
 
     @Scheduled(fixedDelay = 300000) // 5분
     public void executeBotTrades() {
-        if (cachedBotUserIds.isEmpty()) {
+        if (cachedBotUsers.isEmpty()) {
             return;
         }
 
         String currentHour = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHH"));
 
-        for (Long botId : cachedBotUserIds) {
+        for (User bot : cachedBotUsers) {
+            Long botId = bot.getId();
             String limitKey = "bot:order:count:" + botId + ":" + currentHour;
             Long currentCount = redisTemplate.opsForValue().increment(limitKey);
             
@@ -78,14 +79,16 @@ public class TradingBotScheduler {
             }
 
             try {
-                executeRandomTrade(botId);
+                // 봇의 권한에 맞는 PriceMode 결정
+                PriceMode mode = PriceModeResolver.resolve(bot.getRole());
+                executeRandomTrade(botId, mode);
             } catch (Exception e) {
                 log.warn("Bot trade failed for user {}: {}", botId, e.getMessage());
             }
         }
     }
 
-    private void executeRandomTrade(Long botId) {
+    private void executeRandomTrade(Long botId, PriceMode mode) {
         String marketCode = TARGET_MARKETS.get(random.nextInt(TARGET_MARKETS.size()));
         OrderSide side = random.nextBoolean() ? OrderSide.BUY : OrderSide.SELL;
         
@@ -100,7 +103,7 @@ public class TradingBotScheduler {
                 quantity
         );
 
-        tradingService.createOrder(botId, request);
-        log.info("Bot {} executed MARKET {} order for {}", botId, side, marketCode);
+        tradingService.createOrder(botId, request, mode);
+        log.info("Bot {} executed MARKET {} order for {} (mode: {})", botId, side, marketCode, mode);
     }
 }

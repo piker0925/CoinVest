@@ -1,5 +1,6 @@
 package com.coinvest.trading.service;
 
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.price.event.TickerUpdatedEvent;
 import com.coinvest.trading.domain.OrderSide;
 import com.coinvest.trading.domain.OrderType;
@@ -44,9 +45,12 @@ public class StopLossTakeProfitMatcher {
         for (StopLossOrder order : triggeredOrders) {
             try {
                 order.process();
-                executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity());
+                // 포지션의 priceMode를 참조하여 주문 (Position 엔티티에 priceMode 필드가 있다고 가정)
+                PriceMode mode = order.getPosition().getPriceMode();
+                executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity(), mode);
                 order.execute();
-                log.info("Stop-Loss Executed: [User={}, Asset={}, Price={}]", order.getUser().getId(), universalCode, currentPrice);
+                log.info("Stop-Loss Executed: [User={}, Asset={}, Price={}, Mode={}]", 
+                        order.getUser().getId(), universalCode, currentPrice, mode);
             } catch (Exception e) {
                 log.error("Failed to execute Stop-Loss order: {}", order.getId(), e);
                 order.fail();
@@ -61,9 +65,11 @@ public class StopLossTakeProfitMatcher {
         for (TakeProfitOrder order : triggeredOrders) {
             try {
                 order.process();
-                executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity());
+                PriceMode mode = order.getPosition().getPriceMode();
+                executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity(), mode);
                 order.execute();
-                log.info("Take-Profit Executed: [User={}, Asset={}, Price={}]", order.getUser().getId(), universalCode, currentPrice);
+                log.info("Take-Profit Executed: [User={}, Asset={}, Price={}, Mode={}]", 
+                        order.getUser().getId(), universalCode, currentPrice, mode);
             } catch (Exception e) {
                 log.error("Failed to execute Take-Profit order: {}", order.getId(), e);
                 order.fail();
@@ -71,8 +77,7 @@ public class StopLossTakeProfitMatcher {
         }
     }
 
-    private void executeAutoSell(Long userId, String universalCode, BigDecimal quantity) {
-        // 시장가 매도 주문 생성
+    private void executeAutoSell(Long userId, String universalCode, BigDecimal quantity, PriceMode mode) {
         OrderCreateRequest request = new OrderCreateRequest(
                 universalCode,
                 OrderSide.SELL,
@@ -80,6 +85,6 @@ public class StopLossTakeProfitMatcher {
                 null,
                 quantity
         );
-        tradingService.createOrder(userId, request);
+        tradingService.createOrder(userId, request, mode);
     }
 }

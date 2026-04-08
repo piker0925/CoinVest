@@ -38,4 +38,9 @@ public interface TradingStrategy {
      * 모드에 맞는 Redis ZSet에 지정가 주문 등록.
      */
     void registerLimitOrder(Order order);
+
+    /**
+     * 정산 처리 (잔고 반영).
+     */
+    void settle(com.coinvest.trading.domain.Settlement settlement);
 }

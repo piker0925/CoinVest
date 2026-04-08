@@ -69,6 +69,13 @@ public class Balance extends BaseEntity {
         this.unsettled = this.unsettled.add(amount);
     }
 
+    public void decreaseUnsettled(BigDecimal amount) {
+        if (unsettled.compareTo(amount) < 0) {
+            throw new BusinessException(ErrorCode.TRADING_INSUFFICIENT_BALANCE);
+        }
+        this.unsettled = this.unsettled.subtract(amount);
+    }
+
     public void withdraw(BigDecimal amount) {
         decreaseAvailable(amount);
     }

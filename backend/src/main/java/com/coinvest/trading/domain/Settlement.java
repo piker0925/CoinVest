@@ -1,14 +1,18 @@
 package com.coinvest.trading.domain;
 
+import com.coinvest.auth.domain.User;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
-import com.coinvest.auth.domain.User;
+import com.coinvest.global.common.PriceMode;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/**
+ * 정산 엔티티 (T+2 주식 정산 등).
+ */
 @Entity
 @Table(name = "settlements")
 @Getter
@@ -21,7 +25,7 @@ public class Settlement extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trade_id", nullable = false)
     private Trade trade;
 
@@ -36,18 +40,31 @@ public class Settlement extends BaseEntity {
     @Column(nullable = false, precision = 20, scale = 4)
     private BigDecimal amount;
 
-    @Column(nullable = false)
+    @Column(name = "settlement_date", nullable = false)
     private LocalDate settlementDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private SettlementStatus status;
+    @Builder.Default
+    private SettlementStatus status = SettlementStatus.PENDING;
 
-    public void settle() {
-        this.status = SettlementStatus.SETTLED;
-    }
+    /**
+     * 실행 모드 (LIVE, DEMO).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_mode", nullable = false, length = 20)
+    @Builder.Default
+    private PriceMode priceMode = PriceMode.LIVE;
 
     public enum SettlementStatus {
         PENDING, SETTLED, FAILED
+    }
+
+    public void complete() {
+        this.status = SettlementStatus.SETTLED;
+    }
+
+    public void fail() {
+        this.status = SettlementStatus.FAILED;
     }
 }

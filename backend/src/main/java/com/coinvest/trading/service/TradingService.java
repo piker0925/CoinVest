@@ -294,6 +294,7 @@ public class TradingService {
                         .amount(netProceeds)
                         .settlementDate(settlementDate)
                         .status(Settlement.SettlementStatus.PENDING)
+                        .priceMode(strategy.getMode())
                         .build();
                 settlementRepository.save(settlement);
             }
