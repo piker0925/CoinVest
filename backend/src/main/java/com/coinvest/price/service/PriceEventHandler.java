@@ -1,5 +1,6 @@
 package com.coinvest.price.service;
 
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.event.PortfolioValuationEvent;
 import com.coinvest.price.dto.TickerEvent;
@@ -33,9 +34,12 @@ public class PriceEventHandler implements MessageListener {
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
+            String channel = new String(message.getChannel());
+            PriceMode mode = channel.contains(PriceMode.DEMO.getPrefix()) ? PriceMode.DEMO : PriceMode.LIVE;
+
             TickerEvent event = objectMapper.readValue(message.getBody(), TickerEvent.class);
             String universalCode = event.getUniversalCode();
-            String key = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
+            String key = RedisKeyConstants.getTickerPriceKey(mode, universalCode);
 
             // 1. 최신 가격 저장 (TTL 60초)
             redisTemplate.opsForValue().set(key, event.getTradePrice(), Duration.ofSeconds(60));
@@ -45,25 +49,24 @@ public class PriceEventHandler implements MessageListener {
 
             // 3. 지정가 주문 매칭 시도
             try {
-                limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice());
+                limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice(), mode);
             } catch (Exception e) {
-                log.error("Failed to match limit orders for asset: {}", universalCode, e);
+                log.error("Failed to match limit orders for asset: {} (mode: {})", universalCode, mode, e);
             }
 
             // 4. 해당 자산을 보유한 포트폴리오 ID 목록 조회 후 평가 이벤트 발행
-            String mappingKey = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, universalCode);
+            String mappingKey = RedisKeyConstants.getPortfolioAssetMappingKey(mode, universalCode);
             Set<Object> portfolioIds = redisTemplate.opsForSet().members(mappingKey);
 
             if (portfolioIds != null && !portfolioIds.isEmpty()) {
                 for (Object idObj : portfolioIds) {
                     Long portfolioId = Long.valueOf(idObj.toString());
-                    // Kafka 대신 Spring ApplicationEvent 발행
                     eventPublisher.publishEvent(new PortfolioValuationEvent(portfolioId));
                 }
             }
 
             if (log.isTraceEnabled()) {
-                log.trace("Updated Redis price cache via Pub/Sub: {} = {}", universalCode, event.getTradePrice());
+                log.trace("Updated Redis price cache via Pub/Sub: {} = {} (mode: {})", universalCode, event.getTradePrice(), mode);
             }
 
         } catch (Exception e) {

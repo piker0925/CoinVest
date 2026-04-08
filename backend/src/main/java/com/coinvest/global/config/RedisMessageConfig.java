@@ -1,5 +1,6 @@
 package com.coinvest.global.config;
 
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.price.service.PriceEventHandler;
 import org.springframework.context.annotation.Bean;
@@ -17,7 +18,11 @@ public class RedisMessageConfig {
             PriceEventHandler priceEventHandler) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(priceEventHandler, new ChannelTopic(RedisKeyConstants.PRICE_TICKER_CHANNEL));
+        
+        // LIVE 및 DEMO 채널 모두 구독
+        container.addMessageListener(priceEventHandler, new ChannelTopic(RedisKeyConstants.getPriceTickerChannel(PriceMode.LIVE)));
+        container.addMessageListener(priceEventHandler, new ChannelTopic(RedisKeyConstants.getPriceTickerChannel(PriceMode.DEMO)));
+        
         return container;
     }
 }
