@@ -3,10 +3,12 @@ package com.coinvest.trading.domain;
 import com.coinvest.auth.domain.User;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
+import com.coinvest.global.common.PriceMode;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * 체결 내역 엔티티.
@@ -53,6 +55,14 @@ public class Trade extends BaseEntity {
     @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
     private BigDecimal realizedPnl;
 
-    @Column(nullable = false)
-    private java.time.LocalDate settlementDate;
+    /**
+     * 실행 모드 (LIVE, DEMO).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_mode", nullable = false, length = 20)
+    @Builder.Default
+    private PriceMode priceMode = PriceMode.LIVE;
+
+    @Column(name = "settlement_date", nullable = false)
+    private LocalDate settlementDate;
 }

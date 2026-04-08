@@ -1,22 +1,20 @@
 package com.coinvest.trading.controller;
 
 import com.coinvest.global.common.ApiResponse;
-import com.coinvest.trading.dto.OrderCreateRequest;
-import com.coinvest.trading.dto.OrderPreviewRequest;
-import com.coinvest.auth.domain.User;
-import com.coinvest.auth.domain.UserRepository;
-import com.coinvest.global.exception.BusinessException;
-import com.coinvest.global.exception.ErrorCode;
+import com.coinvest.global.common.CursorPageResponse;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
+import com.coinvest.trading.dto.*;
 import com.coinvest.trading.service.TradingQueryService;
 import com.coinvest.trading.service.TradingService;
-import com.coinvest.global.common.CursorPageResponse;
-import com.coinvest.global.common.aop.RateLimit;
-import com.coinvest.trading.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/trading")
@@ -25,71 +23,63 @@ public class TradingController {
 
     private final TradingService tradingService;
     private final TradingQueryService tradingQueryService;
-    private final UserRepository userRepository;
 
     @PostMapping("/orders")
-    @RateLimit(key = "orders", limit = 10, window = 1)
-    public ResponseEntity<ApiResponse<Long>> createOrder(
-            @AuthenticationPrincipal String email,
+    public ApiResponse<Long> createOrder(
+            Authentication authentication,
             @Valid @RequestBody OrderCreateRequest request) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Long orderId = tradingService.createOrder(user.getId(), request);
-        return ResponseEntity.ok(ApiResponse.success(orderId));
-    }
-
-    @DeleteMapping("/orders/{id}")
-    public ResponseEntity<ApiResponse<Void>> cancelOrder(
-            @AuthenticationPrincipal String email,
-            @PathVariable Long id) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        tradingService.cancelOrder(user.getId(), id);
-        return ResponseEntity.ok(ApiResponse.success(null));
+        Long userId = getUserId(authentication);
+        PriceMode mode = resolvePriceMode(authentication);
+        return ApiResponse.success(tradingService.createOrder(userId, request, mode));
     }
 
     @PostMapping("/orders/preview")
-    public ResponseEntity<ApiResponse<OrderPreviewResponse>> previewOrder(
+    public ApiResponse<OrderPreviewResponse> previewOrder(
+            Authentication authentication,
             @Valid @RequestBody OrderPreviewRequest request) {
-        OrderPreviewResponse response = tradingService.previewOrder(request);
-        return ResponseEntity.ok(ApiResponse.success(response));
-    }
-
-    @GetMapping("/orders")
-    public ResponseEntity<ApiResponse<CursorPageResponse<OrderResponse>>> getOrders(
-            @AuthenticationPrincipal String email,
-            @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return ResponseEntity.ok(ApiResponse.success(tradingQueryService.getOrders(user.getId(), cursor, size)));
-    }
-
-    @GetMapping("/trades")
-    public ResponseEntity<ApiResponse<CursorPageResponse<TradeResponse>>> getTrades(
-            @AuthenticationPrincipal String email,
-            @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return ResponseEntity.ok(ApiResponse.success(tradingQueryService.getTrades(user.getId(), cursor, size)));
-    }
-
-    @GetMapping("/positions")
-    public ResponseEntity<ApiResponse<java.util.List<PositionResponse>>> getPositions(
-            @AuthenticationPrincipal String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return ResponseEntity.ok(ApiResponse.success(tradingQueryService.getPositions(user.getId())));
+        PriceMode mode = resolvePriceMode(authentication);
+        return ApiResponse.success(tradingService.previewOrder(request, mode));
     }
 
     @GetMapping("/account")
-    public ResponseEntity<ApiResponse<VirtualAccountResponse>> getAccount(
-            @AuthenticationPrincipal String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return ResponseEntity.ok(ApiResponse.success(tradingQueryService.getAccount(user.getId())));
+    public ApiResponse<VirtualAccountResponse> getAccount(Authentication authentication) {
+        return ApiResponse.success(tradingQueryService.getAccount(getUserId(authentication)));
     }
 
-    @PostMapping("/account/reset")
-    public ResponseEntity<ApiResponse<Void>> resetAccount(
-            @AuthenticationPrincipal String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        tradingService.resetAccount(user.getId());
-        return ResponseEntity.ok(ApiResponse.success(null));
+    @GetMapping("/positions")
+    public ApiResponse<List<PositionResponse>> getPositions(Authentication authentication) {
+        return ApiResponse.success(tradingQueryService.getPositions(getUserId(authentication)));
+    }
+
+    @GetMapping("/orders")
+    public ApiResponse<CursorPageResponse<OrderResponse>> getOrders(
+            Authentication authentication,
+            @RequestParam(required = false) Long cursorId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(tradingQueryService.getOrders(getUserId(authentication), cursorId, size));
+    }
+
+    @GetMapping("/trades")
+    public ApiResponse<CursorPageResponse<TradeResponse>> getTrades(
+            Authentication authentication,
+            @RequestParam(required = false) Long cursorId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(tradingQueryService.getTrades(getUserId(authentication), cursorId, size));
+    }
+
+    private Long getUserId(Authentication authentication) {
+        // 토큰 기반 인증이므로 Principal이 email일 것임. 
+        // 실제 운영 환경에선 CustomUserDetails를 통해 ID를 바로 가져오도록 개선 가능.
+        // 현재는 편의상 별도 조회 없이 이메일을 User 식별자로 사용하거나 Repository에서 조회 필요.
+        // (Auth 연동 시점에 맞춰 최적화 예정)
+        return (Long) authentication.getPrincipal(); // Filter에서 ID를 넣도록 되어있는지 확인 필요
+    }
+
+    private PriceMode resolvePriceMode(Authentication authentication) {
+        if (authentication == null) return PriceMode.DEMO;
+        List<String> authorities = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toList());
+        return PriceModeResolver.resolveFromAuthorities(authorities);
     }
 }

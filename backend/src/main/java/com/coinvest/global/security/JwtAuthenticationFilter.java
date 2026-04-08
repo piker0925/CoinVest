@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -15,11 +16,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 
 /**
  * JWT 인증 필터.
- * 매 요청마다 Access Token의 유효성을 검증하고 인증 정보를 SecurityContext에 저장.
  */
 @Slf4j
 @Component
@@ -36,15 +36,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-            // 블랙리스트 확인 (로그아웃된 토큰인지)
             if (tokenService.isBlacklisted(token)) {
                 log.warn("Blacklisted token used: {}", token);
             } else {
-                String email = jwtTokenProvider.getEmail(token);
+                Long userId = jwtTokenProvider.getUserId(token);
+                String role = jwtTokenProvider.getRole(token);
                 
-                // 단순 인증 객체 생성 (권한은 추후 확장 가능하도록 빈 리스트 전달)
+                // userId를 Principal로 설정하여 서비스 레이어에서 바로 활용 가능하게 함
+                List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                
                 UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(email, null, Collections.emptyList());
+                        new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);

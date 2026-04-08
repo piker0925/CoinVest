@@ -3,8 +3,9 @@ package com.coinvest.trading.service;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.CursorPageResponse;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.common.RedisKeyConstants;
-import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.global.exception.ResourceNotFoundException;
 import com.coinvest.trading.domain.Balance;
@@ -33,9 +34,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * 거래 관련 조회 전용 서비스.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -49,48 +47,42 @@ public class TradingQueryService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ExchangeRateService exchangeRateService;
 
-    /**
-     * 사용자의 가상 계좌 및 통합 자산 정보 조회.
-     */
     public VirtualAccountResponse getAccount(Long userId) {
         VirtualAccount account = virtualAccountRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
+        PriceMode mode = PriceModeResolver.resolve(account.getUser().getRole());
 
         // 1. 모든 통화 잔고를 KRW로 통합 환산 (Buying Power 통합)
         BigDecimal totalBalanceKrw = BigDecimal.ZERO;
         for (Balance balance : account.getBalances()) {
-            BigDecimal rate = exchangeRateService.getExchangeRateWithStatus(balance.getCurrency(), Currency.KRW).rate();
+            BigDecimal rate = exchangeRateService.getExchangeRateWithStatus(balance.getCurrency(), Currency.KRW, mode).rate();
             BigDecimal balanceValueKrw = balance.getTotal().multiply(rate);
             totalBalanceKrw = totalBalanceKrw.add(balanceValueKrw);
         }
 
-        // 2. 모든 보유 자산 평가액 합산 (KRW 기준)
         List<PositionResponse> positions = getPositions(userId);
         BigDecimal totalPositionEvalKrw = positions.stream()
                 .map(PositionResponse::evaluationAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        // 3. 최종 순자산(Net Worth) 반환
         return VirtualAccountResponse.of(account, totalBalanceKrw, totalPositionEvalKrw);
     }
 
-    /**
-     * 보유 포지션 리스트 조회 (현재가 포함).
-     */
     public List<PositionResponse> getPositions(Long userId) {
+        VirtualAccount account = virtualAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
+        PriceMode mode = PriceModeResolver.resolve(account.getUser().getRole());
+        
         List<Position> positions = positionRepository.findAllByUserId(userId);
 
         return positions.stream()
                 .map(pos -> {
-                    BigDecimal currentPrice = getCurrentPriceFromRedis(pos.getUniversalCode());
+                    BigDecimal currentPrice = getCurrentPriceFromRedis(pos.getUniversalCode(), mode);
                     return PositionResponse.of(pos, currentPrice);
                 })
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 주문 내역 조회 (무한 스크롤).
-     */
     public CursorPageResponse<OrderResponse> getOrders(Long userId, Long cursorId, int size) {
         Pageable pageable = PageRequest.of(0, size);
         Slice<Order> orders;
@@ -110,9 +102,6 @@ public class TradingQueryService {
         return new CursorPageResponse<>(content, nextCursor, orders.hasNext());
     }
 
-    /**
-     * 체결 내역 조회 (무한 스크롤).
-     */
     public CursorPageResponse<TradeResponse> getTrades(Long userId, Long cursorId, int size) {
         Pageable pageable = PageRequest.of(0, size);
         Slice<Trade> trades;
@@ -132,8 +121,8 @@ public class TradingQueryService {
         return new CursorPageResponse<>(content, nextCursor, trades.hasNext());
     }
 
-    private BigDecimal getCurrentPriceFromRedis(String universalCode) {
-        String tickerKey = RedisKeyConstants.format(RedisKeyConstants.TICKER_PRICE_KEY, universalCode);
+    private BigDecimal getCurrentPriceFromRedis(String universalCode, PriceMode mode) {
+        String tickerKey = RedisKeyConstants.getTickerPriceKey(mode, universalCode);
         Object priceObj = redisTemplate.opsForValue().get(tickerKey);
 
         if (priceObj == null) return null;
@@ -141,7 +130,7 @@ public class TradingQueryService {
         try {
             return new BigDecimal(priceObj.toString());
         } catch (NumberFormatException e) {
-            log.error("Invalid price format in Redis for market: {}", universalCode);
+            log.error("Invalid price format in Redis for market: {} (mode: {})", universalCode, mode);
             return null;
         }
     }

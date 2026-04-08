@@ -8,6 +8,7 @@ import com.coinvest.auth.dto.TokenResponse;
 import com.coinvest.auth.dto.UserResponse;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
+import com.coinvest.global.exception.ResourceNotFoundException;
 import com.coinvest.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,11 +50,10 @@ public class AuthService {
     }
 
     /**
-     * 로그인 (Brute-force 방어 포함)
+     * 로그인
      */
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        // 1. 차단 여부 확인
         if (loginFailureService.isBlocked(request.getEmail())) {
             throw new BusinessException(ErrorCode.AUTH_TOO_MANY_ATTEMPTS);
         }
@@ -64,21 +64,19 @@ public class AuthService {
                     return new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
                 });
 
-        // 2. 계정 활성화 여부 확인 (Soft-delete 대응)
         if (!user.isActive()) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
-        // 3. 비밀번호 확인
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             loginFailureService.increaseAttempts(request.getEmail());
             throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
-        // 4. 성공 시 실패 기록 초기화 및 토큰 발급
         loginFailureService.resetAttempts(request.getEmail());
         
-        String accessToken = jwtTokenProvider.createAccessToken(user.getEmail());
+        // userId 추가 전달
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getEmail());
 
         tokenService.saveRefreshToken(user.getEmail(), refreshToken, refreshTokenExpiration);
@@ -87,7 +85,7 @@ public class AuthService {
     }
 
     /**
-     * 로그아웃 (Stateless)
+     * 로그아웃
      */
     @Transactional
     public void logout(String accessToken) {
@@ -98,17 +96,15 @@ public class AuthService {
         String email = jwtTokenProvider.getEmail(accessToken);
         tokenService.deleteRefreshToken(email);
         
-        // Access Token 블랙리스트 추가 (남은 유효 시간만큼)
         long remainingTime = jwtTokenProvider.getRemainingExpirationTime(accessToken);
         tokenService.addToBlacklist(accessToken, remainingTime);
     }
 
     /**
-     * 토큰 재발급 (RTR + Theft Detection)
+     * 토큰 재발급
      */
     @Transactional
     public TokenResponse reissue(String refreshToken) {
-        // 1. 토큰 자체 검증
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
@@ -116,16 +112,17 @@ public class AuthService {
         String email = jwtTokenProvider.getEmail(refreshToken);
         String savedRefreshToken = tokenService.getRefreshToken(email);
 
-        // 2. Theft Detection (이미 사용된 토큰이거나 존재하지 않는 경우)
         if (savedRefreshToken == null || !savedRefreshToken.equals(refreshToken)) {
-            // 탈취로 간주하고 해당 사용자의 모든 세션 무효화
             tokenService.deleteAllRefreshTokens(email);
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
 
-        // 3. RTR 적용: 새 토큰 발급 및 기존 토큰 무효화
-        String newAccessToken = jwtTokenProvider.createAccessToken(email);
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(email);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
+
+        // userId 추가 전달
+        String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getEmail());
 
         tokenService.saveRefreshToken(email, newRefreshToken, refreshTokenExpiration);
 

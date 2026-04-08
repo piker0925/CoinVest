@@ -2,6 +2,8 @@ package com.coinvest.portfolio.service;
 
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
@@ -36,9 +38,6 @@ public class PortfolioValuationService {
     private final ExchangeRateService exchangeRateService;
     private final VirtualAccountRepository virtualAccountRepository;
 
-    /**
-     * 포트폴리오의 기본 설정 통화로 평가 수행.
-     */
     @Transactional(readOnly = true)
     public PortfolioValuation evaluate(Long portfolioId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId).orElse(null);
@@ -46,15 +45,12 @@ public class PortfolioValuationService {
         return evaluate(portfolioId, portfolio.getBaseCurrency());
     }
 
-    /**
-     * 특정 기준 통화(baseCurrency)로 포트폴리오 가치 평가 수행.
-     * 정책 1-A: 순수 자산 가치만 합산 (계좌 현금 제외).
-     */
     @Transactional(readOnly = true)
     public PortfolioValuation evaluate(Long portfolioId, Currency baseCurrency) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId).orElse(null);
         if (portfolio == null) return null;
 
+        PriceMode mode = PriceModeResolver.resolve(portfolio.getUser().getRole());
         List<PortfolioValuation.AssetValuation> assetValuations = new ArrayList<>();
         BigDecimal totalAssetValueBase = BigDecimal.ZERO;
         boolean isStaleExchangeRate = false;
@@ -63,7 +59,7 @@ public class PortfolioValuationService {
         List<String> universalCodes = portfolio.getAssets().stream()
                 .map(PortfolioAsset::getUniversalCode)
                 .collect(Collectors.toList());
-        Map<String, BigDecimal> priceMap = priceService.getPrices(universalCodes);
+        Map<String, BigDecimal> priceMap = priceService.getPrices(universalCodes, mode);
 
         // 2. 환율 사전 로드 (Prefetch)
         Set<Currency> requiredCurrencies = new HashSet<>();
@@ -76,12 +72,12 @@ public class PortfolioValuationService {
 
         Map<Currency, ExchangeRateService.ExchangeRateResponse> fxMap = new HashMap<>();
         for (Currency currency : requiredCurrencies) {
-            ExchangeRateService.ExchangeRateResponse fxResponse = exchangeRateService.getExchangeRateWithStatus(currency, baseCurrency);
+            ExchangeRateService.ExchangeRateResponse fxResponse = exchangeRateService.getExchangeRateWithStatus(currency, baseCurrency, mode);
             fxMap.put(currency, fxResponse);
             if (fxResponse.isStale()) isStaleExchangeRate = true;
         }
 
-        // 3. 개별 자산 가치 평가 (totalAssetValueBase에만 합산)
+        // 3. 개별 자산 가치 평가
         for (PortfolioAsset asset : portfolio.getAssets()) {
             BigDecimal currentPrice = priceMap.getOrDefault(asset.getUniversalCode(), BigDecimal.ZERO);
             BigDecimal evaluationNative = asset.getQuantity().multiply(currentPrice);
@@ -103,7 +99,6 @@ public class PortfolioValuationService {
                     .build());
         }
 
-        // 4. Buying Power 통합 가치 (자산 합계에서는 절대 제외 - 정책 1-A)
         BigDecimal totalBuyingPowerBase = BigDecimal.ZERO;
         if (account != null) {
             for (Balance balance : account.getBalances()) {
@@ -113,7 +108,6 @@ public class PortfolioValuationService {
             }
         }
 
-        // 5. 비중 계산 (순수 자산 총합 기준)
         if (totalAssetValueBase.compareTo(BigDecimal.ZERO) > 0) {
             for (PortfolioValuation.AssetValuation av : assetValuations) {
                 BigDecimal weight = av.getEvaluationBase()
@@ -126,14 +120,14 @@ public class PortfolioValuationService {
 
         PortfolioValuation result = PortfolioValuation.builder()
                 .portfolioId(portfolioId)
-                .totalEvaluationBase(totalAssetValueBase) // 정책 1-A 준수
+                .totalEvaluationBase(totalAssetValueBase)
                 .buyingPowerBase(totalBuyingPowerBase)
                 .baseCurrency(baseCurrency)
                 .isStaleExchangeRate(isStaleExchangeRate)
                 .assetValuations(assetValuations)
                 .build();
 
-        String key = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_VALUATION_KEY, portfolioId);
+        String key = RedisKeyConstants.getPortfolioValuationKey(mode, portfolioId);
         redisTemplate.opsForValue().set(key, result);
 
         return result;

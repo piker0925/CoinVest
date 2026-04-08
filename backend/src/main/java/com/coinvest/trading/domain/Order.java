@@ -4,6 +4,7 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.asset.domain.AssetClass;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
+import com.coinvest.global.common.PriceMode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -43,6 +44,14 @@ public class Order extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "asset_class", nullable = false, length = 20)
     private AssetClass assetClass;
+
+    /**
+     * 실행 모드 (LIVE, DEMO).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_mode", nullable = false, length = 20)
+    @Builder.Default
+    private PriceMode priceMode = PriceMode.LIVE;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

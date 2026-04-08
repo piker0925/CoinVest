@@ -3,6 +3,7 @@ package com.coinvest.trading.domain;
 import com.coinvest.auth.domain.User;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
+import com.coinvest.global.common.PriceMode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,7 +16,7 @@ import java.math.RoundingMode;
  */
 @Entity
 @Table(name = "positions", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id", "universal_code"})
+        @UniqueConstraint(columnNames = {"user_id", "universal_code", "price_mode"})
 })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -41,6 +42,14 @@ public class Position extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private Currency currency;
+
+    /**
+     * 실행 모드 (LIVE, DEMO).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_mode", nullable = false, length = 20)
+    @Builder.Default
+    private PriceMode priceMode = PriceMode.LIVE;
 
     /**
      * 평균 매수 단가.

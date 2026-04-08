@@ -1,5 +1,6 @@
 package com.coinvest.global.security;
 
+import com.coinvest.auth.domain.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Map;
 
 /**
  * JWT 생성 및 검증을 담당하는 유틸리티 클래스.
@@ -31,31 +33,35 @@ public class JwtTokenProvider {
 
     private SecretKey secretKey;
 
+    private static final String ROLE_CLAIM = "role";
+    private static final String ID_CLAIM = "userId";
+
     @PostConstruct
     protected void init() {
         this.secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
-     * Access Token 생성
+     * Access Token 생성 (ID, Role 포함)
      */
-    public String createAccessToken(String email) {
-        return createToken(email, accessTokenExpiration);
+    public String createAccessToken(Long userId, String email, UserRole role) {
+        return createToken(email, Map.of(ROLE_CLAIM, role.name(), ID_CLAIM, userId), accessTokenExpiration);
     }
 
     /**
      * Refresh Token 생성
      */
     public String createRefreshToken(String email) {
-        return createToken(email, refreshTokenExpiration);
+        return createToken(email, Map.of(), refreshTokenExpiration);
     }
 
-    private String createToken(String subject, long expirationTime) {
+    private String createToken(String subject, Map<String, Object> claims, long expirationTime) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationTime);
 
         return Jwts.builder()
                 .subject(subject)
+                .claims(claims)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(secretKey)
@@ -67,6 +73,20 @@ public class JwtTokenProvider {
      */
     public String getEmail(String token) {
         return getClaims(token).getSubject();
+    }
+
+    /**
+     * 토큰에서 User ID 추출
+     */
+    public Long getUserId(String token) {
+        return getClaims(token).get(ID_CLAIM, Long.class);
+    }
+
+    /**
+     * 토큰에서 Role 추출
+     */
+    public String getRole(String token) {
+        return getClaims(token).get(ROLE_CLAIM, String.class);
     }
 
     /**

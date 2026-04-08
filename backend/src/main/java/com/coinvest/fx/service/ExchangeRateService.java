@@ -3,6 +3,8 @@ package com.coinvest.fx.service;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.domain.ExchangeRate;
 import com.coinvest.fx.repository.ExchangeRateRepository;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.global.exception.CircuitBreakerException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.AlertHistory;
@@ -16,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,9 +34,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import com.coinvest.global.common.RedisKeyConstants;
-import org.springframework.data.redis.core.RedisTemplate;
 
 @Slf4j
 @Service
@@ -51,7 +51,6 @@ public class ExchangeRateService {
     private static final int MAX_AGE_HOURS = 48;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
-    // 로컬 캐시 (Secondary)
     private final Map<String, ExchangeRate> localRateCache = new ConcurrentHashMap<>();
 
     @Value("${coinvest.alerts.system-webhook-url:}")
@@ -59,16 +58,20 @@ public class ExchangeRateService {
 
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 
-    /**
-     * 환율 정보와 상태를 함께 반환. (L1: Redis, L2: Local, L3: DB)
-     */
     public ExchangeRateResponse getExchangeRateWithStatus(Currency base, Currency quote) {
+        return getExchangeRateWithStatus(base, quote, PriceMode.LIVE);
+    }
+
+    /**
+     * 환율 정보와 상태를 함께 반환.
+     */
+    public ExchangeRateResponse getExchangeRateWithStatus(Currency base, Currency quote, PriceMode mode) {
         if (base == quote) {
             return new ExchangeRateResponse(BigDecimal.ONE, false);
         }
 
         String pair = base.name() + ":" + quote.name();
-        String redisKey = RedisKeyConstants.format(RedisKeyConstants.EXCHANGE_RATE_KEY, pair);
+        String redisKey = RedisKeyConstants.getExchangeRateKey(mode, pair);
 
         // 1. L1: Redis 확인
         Object redisVal = redisTemplate.opsForValue().get(redisKey);
@@ -76,7 +79,13 @@ public class ExchangeRateService {
             return new ExchangeRateResponse(new BigDecimal(redisVal.toString()), false);
         }
 
-        // 2. L2: 로컬/DB 확인 및 Redis 갱신
+        // 2. DEMO 모드인데 Redis에 없으면 실패 (SimulatedFxProvider가 채워줘야 함)
+        if (mode == PriceMode.DEMO) {
+            log.error("Demo exchange rate not found in Redis: pair={}", pair);
+            throw new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED);
+        }
+
+        // 3. LIVE 모드일 경우 L2(Local), L3(DB) 확인 및 Redis 갱신
         ExchangeRate rate = localRateCache.computeIfAbsent(pair, k -> 
             exchangeRateRepository.findFirstByBaseCurrencyAndQuoteCurrencyOrderByFetchedAtDesc(base, quote)
                 .orElse(null)
@@ -96,14 +105,16 @@ public class ExchangeRateService {
 
     public record ExchangeRateResponse(BigDecimal rate, boolean isStale) {}
 
-    /**
-     * 엄격한 환율 조회. (거래 서비스용 - 정산 등 정확도가 생명인 곳)
-     */
     @Transactional(readOnly = true)
     public BigDecimal getCurrentExchangeRate(Currency base, Currency quote) {
-        ExchangeRateResponse response = getExchangeRateWithStatus(base, quote);
+        return getCurrentExchangeRate(base, quote, PriceMode.LIVE);
+    }
+
+    @Transactional(readOnly = true)
+    public BigDecimal getCurrentExchangeRate(Currency base, Currency quote, PriceMode mode) {
+        ExchangeRateResponse response = getExchangeRateWithStatus(base, quote, mode);
         if (response.isStale()) {
-            log.error("Strict exchange rate check failed due to staleness: base={}, quote={}", base, quote);
+            log.error("Strict exchange rate check failed due to staleness: base={}, quote={} (mode: {})", base, quote, mode);
             throw new CircuitBreakerException(ErrorCode.EXCHANGE_RATE_CIRCUIT_BREAKER_TRIGGERED);
         }
         return response.rate();
@@ -124,14 +135,14 @@ public class ExchangeRateService {
                     .build();
 
             exchangeRateRepository.save(exchangeRate);
-            localRateCache.put("USD:KRW", exchangeRate); // 캐시 갱신
+            localRateCache.put("USD:KRW", exchangeRate);
             
-            // Redis 갱신
-            String redisKey = RedisKeyConstants.format(RedisKeyConstants.EXCHANGE_RATE_KEY, "USD:KRW");
+            // 실데이터 환율은 항상 LIVE 채널에 갱신
+            String redisKey = RedisKeyConstants.getExchangeRateKey(PriceMode.LIVE, "USD:KRW");
             redisTemplate.opsForValue().set(redisKey, fetchedRate.toString(), Duration.ofHours(1));
 
             consecutiveFailures.set(0);
-            log.info("Exchange rate (USD/KRW) fetched from KIS and cached in Redis: {}", fetchedRate);
+            log.info("Exchange rate (USD/KRW) fetched from KIS and cached in Redis (LIVE): {}", fetchedRate);
 
         } catch (Exception e) {
             int failures = consecutiveFailures.incrementAndGet();

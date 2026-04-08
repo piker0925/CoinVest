@@ -2,6 +2,7 @@ package com.coinvest.trading.service;
 
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.trading.domain.Balance;
@@ -20,8 +21,12 @@ public class MarginCalculator {
     private final ExchangeRateService exchangeRateService;
 
     public BigDecimal calculateAndApplyMargin(Balance assetBalance, Balance otherBalance, BigDecimal requiredAmount) {
+        return calculateAndApplyMargin(assetBalance, otherBalance, requiredAmount, PriceMode.LIVE);
+    }
+
+    public BigDecimal calculateAndApplyMargin(Balance assetBalance, Balance otherBalance, BigDecimal requiredAmount, PriceMode mode) {
         BigDecimal availableTotal = assetBalance.getAvailableForPurchase();
-        BigDecimal fxRate = exchangeRateService.getCurrentExchangeRate(Currency.USD, Currency.KRW);
+        BigDecimal fxRate = exchangeRateService.getCurrentExchangeRate(Currency.USD, Currency.KRW, mode);
 
         if (availableTotal.compareTo(requiredAmount) < 0) {
             BigDecimal shortage = requiredAmount.subtract(availableTotal);
@@ -42,8 +47,8 @@ public class MarginCalculator {
             otherBalance.decreaseAvailable(requiredOtherCurrency);
             assetBalance.increaseAvailable(shortage);
             
-            log.info("Integrated Margin Applied: Converted {} {} to {} {}", 
-                    requiredOtherCurrency, otherBalance.getCurrency(), shortage, assetBalance.getCurrency());
+            log.info("Integrated Margin Applied (mode: {}): Converted {} {} to {} {}", 
+                    mode, requiredOtherCurrency, otherBalance.getCurrency(), shortage, assetBalance.getCurrency());
         }
         
         assetBalance.lock(requiredAmount);

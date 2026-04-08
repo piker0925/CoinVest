@@ -1,5 +1,7 @@
 package com.coinvest.portfolio.service;
 
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
@@ -34,7 +36,6 @@ public class PortfolioMappingService {
         log.info("Initializing portfolio-asset mappings in Redis...");
         List<Portfolio> allPortfolios = portfolioRepository.findAll();
         
-        // 기존 매핑 초기화 (안전하게 전체 포트폴리오를 순회하며 갱신함)
         for (Portfolio portfolio : allPortfolios) {
             updateMapping(portfolio);
         }
@@ -51,7 +52,6 @@ public class PortfolioMappingService {
         if (event.type() == PortfolioUpdatedEvent.UpdateType.DELETE) {
             removeMapping(event.portfolioId(), event.universalCodes());
         } else {
-            // CREATE, UPDATE의 경우 DB에서 최신 정보를 조회하여 갱신
             portfolioRepository.findById(event.portfolioId())
                     .ifPresent(this::updateMapping);
         }
@@ -62,8 +62,9 @@ public class PortfolioMappingService {
      */
     private void updateMapping(Portfolio portfolio) {
         Long portfolioId = portfolio.getId();
+        PriceMode mode = PriceModeResolver.resolve(portfolio.getUser().getRole());
         for (PortfolioAsset asset : portfolio.getAssets()) {
-            String key = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, asset.getUniversalCode());
+            String key = RedisKeyConstants.getPortfolioAssetMappingKey(mode, asset.getUniversalCode());
             redisTemplate.opsForSet().add(key, portfolioId);
         }
     }
@@ -73,8 +74,10 @@ public class PortfolioMappingService {
      */
     private void removeMapping(Long portfolioId, List<String> marketCodes) {
         for (String marketCode : marketCodes) {
-            String key = RedisKeyConstants.format(RedisKeyConstants.PORTFOLIO_ASSET_MAPPING_KEY, marketCode);
-            redisTemplate.opsForSet().remove(key, portfolioId);
+            for (PriceMode mode : PriceMode.values()) {
+                String key = RedisKeyConstants.getPortfolioAssetMappingKey(mode, marketCode);
+                redisTemplate.opsForSet().remove(key, portfolioId);
+            }
         }
     }
 }
