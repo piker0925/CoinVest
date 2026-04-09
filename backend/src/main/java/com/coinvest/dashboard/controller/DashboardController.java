@@ -4,13 +4,17 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.dashboard.dto.BenchmarkComparison;
 import com.coinvest.dashboard.dto.Period;
 import com.coinvest.dashboard.dto.PerformanceResponse;
+import com.coinvest.dashboard.dto.SystemMetric;
 import com.coinvest.dashboard.service.BenchmarkService;
+import com.coinvest.dashboard.service.MonitoringService;
 import com.coinvest.global.common.ApiResponse;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 개인화 벤치마크 대시보드 API.
@@ -22,6 +26,17 @@ import org.springframework.web.bind.annotation.*;
 public class DashboardController {
 
     private final BenchmarkService benchmarkService;
+    private final MonitoringService monitoringService;
+
+    /**
+     * 관리자용 시스템 지표 조회.
+     * 최근 24시간의 CPU, Memory, DB 상태를 반환.
+     */
+    @GetMapping("/admin/metrics")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<List<SystemMetric>> getSystemMetrics() {
+        return ApiResponse.success(monitoringService.getRecentMetrics());
+    }
 
     /**
      * 내 포트폴리오 수익률 조회.

@@ -1,46 +1,79 @@
-version: '3.8'
-
 services:
-  # PostgreSQL 16
-  postgres:
-    image: postgres:16-alpine
-    container_name: coinvest-postgres
-    environment:
-      POSTGRES_DB: coinvest
-      POSTGRES_USER: coinvest
-      POSTGRES_PASSWORD: password
+  nginx:
+    image: nginx:stable-alpine
+    container_name: coinvest-proxy
     ports:
-      - "5432:5432"
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    environment:
+      - TZ=Asia/Seoul
+    networks:
+      - coinvest-network
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: coinvest-app
+    expose:
+      - "8080"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - TZ=Asia/Seoul
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - coinvest-network
+    restart: always
+
+  db:
+    image: postgres:16-alpine
+    container_name: coinvest-db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-coinvest}
+      - POSTGRES_USER=${POSTGRES_USER:-coinvest}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=Asia/Seoul
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U coinvest" ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coinvest} -d ${POSTGRES_DB:-coinvest}"]
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - coinvest-network
+    restart: always
 
-  # Redis 7
   redis:
     image: redis:7-alpine
     container_name: coinvest-redis
-    ports:
-      - "6379:6379"
+    environment:
+      - TZ=Asia/Seoul
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - coinvest-network
-
-volumes:
-  postgres_data:
-  redis_data:
+    restart: always
 
 networks:
   coinvest-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

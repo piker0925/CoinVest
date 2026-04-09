@@ -1,0 +1,78 @@
+name: CoinVest CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x backend/gradlew
+
+    - name: Build with Gradle (Fast build - No emulation)
+      run: cd backend && ./gradlew bootJar -x test
+
+    - name: Set up Docker Buildx (For ARM64 build)
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push ARM64 Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: backend/Dockerfile
+        platforms: linux/arm64
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-app:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Deploy to Oracle Cloud via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.OCI_HOST }}
+        username: ${{ secrets.OCI_USERNAME }}
+        key: ${{ secrets.OCI_SSH_KEY }}
+        script: |
+          mkdir -p ~/coinvest/nginx
+          cd ~/coinvest
+          
+          # .env 파일 생성 (싱글 쿼트 적용으로 특수문자 이스케이프 방지)
+          cat <<'EOF' > .env
+          ${{ secrets.APP_ENV_FILE }}
+          EOF
+          
+          # docker-compose.yml 동기화 (cat 방식으로 덮어쓰기)
+          cat <<'EOF' > docker-compose.yml
+          ${{ secrets.DOCKER_COMPOSE_CONTENT }}
+          EOF
+          
+          # nginx/default.conf 동기화
+          cat <<'EOF' > nginx/default.conf
+          ${{ secrets.NGINX_CONF_CONTENT }}
+          EOF
+          
+          # 최신 이미지 풀 및 재시작
+          docker-compose pull
+          docker-compose up -d
+          
+          # 미사용 이미지 정리 (디스크 부족 방지)
+          docker image prune -f
