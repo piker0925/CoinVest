@@ -23,7 +23,7 @@
 
 ### 3. 전략 봇 및 백테스팅 레포트 (Bot Ecosystem)
 
-- **5대 핵심 전략 봇**: 모멘텀, 가치 투자, 인덱스 추적 등 고유한 알고리즘을 가진 봇들이 시뮬레이션 시장에서 24시간 매매를 수행합니다.
+- **4대 핵심 전략 봇**: 모멘텀, 평균 회귀, 인덱스 추적, 랜덤 베이스라인 알고리즘을 가진 봇들이 시뮬레이션 시장에서 24시간 매매를 수행합니다.
 - **백테스팅 레포트**: 봇의 기간별(1M, 3M, ALL) 수익률·MDD·승률·샤프비율을 통계적 데이터로 제공합니다. (투자 조언이 아닌 알고리즘 성과 분석)
 
 ### 4. 개인화 벤치마크 대시보드 (Personalized Benchmark)
@@ -41,7 +41,7 @@
 | **Frontend**  | ![React 18](https://img.shields.io/badge/React-18-blue) ![Vite](https://img.shields.io/badge/Vite-latest-purple) ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-latest-blue) | Web-First 반응형 UI, Recharts 기반 벤치마크 차트               |
 | **Messaging** | Redis Pub/Sub + Spring ApplicationEvent                                                                                                                                               | 가격 이벤트 전파 및 도메인 이벤트 처리. 단일 인스턴스에서 Kafka는 과잉(4GB 절약) |
 | **Database**  | ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-blue) ![Redis 7](https://img.shields.io/badge/Redis-7-red)                                                                | 정합성 보장을 위한 비관적 락 및 고속 캐시/이벤트 채널                     |
-| **Infra**     | ![Docker](https://img.shields.io/badge/Docker-latest-blue) ![Oracle Cloud](https://img.shields.io/badge/OCI_ARM-24GB_RAM-red)                                                         | 단일 ARM 인스턴스 최적화 (PostgreSQL + Redis + App)          |
+| **Infra**     | ![Docker](https://img.shields.io/badge/Docker-latest-blue) ![Nginx](https://img.shields.io/badge/Nginx-latest-green) ![Oracle Cloud](https://img.shields.io/badge/OCI_ARM-24GB_RAM-red) | Nginx Reverse Proxy 기반 단일 인스턴스 최적화 및 CI/CD 자동화 |
 
 ---
 
@@ -120,7 +120,18 @@ docker-compose up -d
 cd frontend && npm install && npm run dev
 ```
 
-Demo 모드는 별도 API 키 없이 즉시 실행됩니다. 가상 자산(PINE, SSEN, VTC 등)으로 시뮬레이션 거래를 체험할 수 있습니다.
+### 운영 환경 배포 (GitHub Actions)
+
+본 프로젝트는 Oracle Cloud ARM 환경에 최적화된 CI/CD 파이프라인을 내장하고 있습니다.
+
+1.  **GitHub Secrets 설정**:
+    - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`: 도커 허브 계정 정보.
+    - `OCI_HOST`, `OCI_USERNAME`, `OCI_SSH_KEY`: 오라클 서버 접속 정보.
+    - `APP_ENV_FILE`: `.env` 파일 내용 전체.
+    - `DOCKER_COMPOSE_CONTENT`: 프로젝트의 `docker-compose.yml` 내용.
+    - `NGINX_CONF_CONTENT`: `nginx/default.conf` 내용.
+2.  `main` 브랜치 푸시 시 자동으로 **x86 빌드 -> ARM64 패키징 -> 서버 배포**가 진행됩니다.
+3.  **초경량 모니터링**: 배포 후 관리자 계정으로 `/api/v1/dashboard/admin/metrics`에서 실시간 시스템 상태를 확인할 수 있습니다.
 
 ### Live 모드 (실제 API 연동 — 자체 배포)
 
