@@ -1,8 +1,10 @@
 package com.coinvest.portfolio.service;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.auth.domain.UserRole;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
 import com.coinvest.portfolio.domain.PortfolioRepository;
@@ -23,6 +25,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +35,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT) // 엄격 모드 해제
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PortfolioValuationServiceTest {
 
     @InjectMocks
@@ -58,7 +61,7 @@ class PortfolioValuationServiceTest {
     void evaluate_ExcludesCash() {
         // [Given]
         Long portfolioId = 1L;
-        User user = User.builder().id(100L).build();
+        User user = User.builder().id(100L).role(UserRole.USER).build();
         Portfolio portfolio = mock(Portfolio.class);
         when(portfolio.getUser()).thenReturn(user);
         when(portfolio.getBaseCurrency()).thenReturn(Currency.KRW);
@@ -73,8 +76,12 @@ class PortfolioValuationServiceTest {
         when(account.getBalances()).thenReturn(List.of(krwBalance));
         when(virtualAccountRepository.findByUserId(user.getId())).thenReturn(Optional.of(account));
 
-        when(priceService.getPrices(anyList())).thenReturn(Map.of("CRYPTO:BTC", new BigDecimal("100000000")));
-        when(exchangeRateService.getExchangeRateWithStatus(any(), any()))
+        // PriceMode 인자를 포함한 스터빙으로 수정
+        when(priceService.getPrices(anyList(), any(PriceMode.class)))
+                .thenReturn(Map.of("CRYPTO:BTC", new BigDecimal("100000000")));
+        
+        // ExchangeRateService도 PriceMode 인자 포함 스터빙
+        when(exchangeRateService.getExchangeRateWithStatus(any(), any(), any(PriceMode.class)))
                 .thenReturn(new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false));
         
         when(redisTemplate.opsForValue()).thenReturn(mock(ValueOperations.class));
@@ -92,15 +99,21 @@ class PortfolioValuationServiceTest {
         // [Given]
         Long portfolioId = 1L;
         Portfolio portfolio = mock(Portfolio.class);
-        when(portfolio.getUser()).thenReturn(User.builder().id(1L).build());
+        User user = User.builder().id(1L).role(UserRole.USER).build();
+        when(portfolio.getUser()).thenReturn(user);
         when(portfolioRepository.findById(portfolioId)).thenReturn(Optional.of(portfolio));
         
         PortfolioAsset usdAsset = PortfolioAsset.builder()
                 .universalCode("US:AAPL").currency(Currency.USD).quantity(BigDecimal.ONE).build();
         when(portfolio.getAssets()).thenReturn(List.of(usdAsset));
 
-        when(exchangeRateService.getExchangeRateWithStatus(any(), any()))
+        // PriceMode 인자 포함 스터빙
+        when(priceService.getPrices(anyList(), any(PriceMode.class)))
+                .thenReturn(Map.of("US:AAPL", new BigDecimal("200")));
+        
+        when(exchangeRateService.getExchangeRateWithStatus(any(), any(), any(PriceMode.class)))
                 .thenReturn(new ExchangeRateService.ExchangeRateResponse(new BigDecimal("1400"), true));
+        
         when(redisTemplate.opsForValue()).thenReturn(mock(ValueOperations.class));
 
         // [When]

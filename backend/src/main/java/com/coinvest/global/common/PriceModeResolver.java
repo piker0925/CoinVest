@@ -16,7 +16,7 @@ public final class PriceModeResolver {
         if (role == UserRole.ADMIN) {
             return PriceMode.LIVE;
         }
-        return PriceMode.DEMO;
+        return PriceMode.DEMO; // USER, BOT 모두 DEMO
     }
 
     /**

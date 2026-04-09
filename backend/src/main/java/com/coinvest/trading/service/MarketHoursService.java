@@ -91,6 +91,15 @@ public class MarketHoursService {
         return !calendarRepository.existsByExchangeAndHolidayDate(exchange, date);
     }
 
+    /**
+     * 특정 날짜에 거래소가 개장했는지 확인 (시간과 무관).
+     * LiveBenchmarkProvider의 Guard Clause에서 사용.
+     * 주말 및 DB 등록 휴장일이면 false.
+     */
+    public boolean wasOpenOn(Exchange exchange, LocalDate date) {
+        return isBusinessDay(exchange, date);
+    }
+
     private Exchange getExchangeFromAsset(Asset asset) {
         return switch (asset.getAssetClass()) {
             case CRYPTO -> Exchange.UPBIT;

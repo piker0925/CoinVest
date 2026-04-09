@@ -30,7 +30,6 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        if (builder == null) return new RestTemplate();
         return builder
                 .setConnectTimeout(Duration.ofSeconds(5))
                 .setReadTimeout(Duration.ofSeconds(5))

@@ -5,6 +5,7 @@ import com.coinvest.asset.domain.AssetClass;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
+import com.coinvest.auth.domain.UserRole;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.PriceMode;
@@ -117,7 +118,7 @@ class TradingServiceTest {
 
     @BeforeEach
     void setUp() {
-        testUser = User.builder().email("test@example.com").nickname("Tester").build();
+        testUser = User.builder().id(100L).email("test@example.com").role(UserRole.USER).nickname("Tester").build();
         ReflectionTestUtils.setField(testUser, "id", userId);
 
         account = VirtualAccount.builder()
@@ -160,11 +161,12 @@ class TradingServiceTest {
         given(tradingStrategy.getCurrentPrice(universalCode)).willReturn(currentPrice);
         given(marketHoursService.isMarketOpen(btcAsset)).willReturn(true);
         
+        // 실제 로직과 동일하게 lock() 호출
         given(marginCalculator.calculateAndApplyMargin(any(), any(), any(), any(PriceMode.class))).willAnswer(inv -> {
-            BigDecimal totalAmount = currentPrice.multiply(request.quantity());
-            BigDecimal fee = totalAmount.multiply(new BigDecimal("0.0005"));
-            krwBalance.decreaseAvailable(totalAmount.add(fee));
-            return BigDecimal.ONE; // fxRate
+            BigDecimal amount = inv.getArgument(2);
+            Balance bal = inv.getArgument(0);
+            bal.lock(amount);
+            return BigDecimal.ONE; 
         });
 
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
@@ -200,11 +202,12 @@ class TradingServiceTest {
         given(tradingStrategy.getCurrentPrice(universalCode)).willReturn(new BigDecimal("100000000"));
         given(marketHoursService.isMarketOpen(btcAsset)).willReturn(true);
         
-        // Mock MarginCalculator: 스레드 안전하게 잔고 차감
+        // 실제 로직 모방: lock() 사용
         doAnswer(inv -> {
             BigDecimal amount = inv.getArgument(2);
-            synchronized (krwBalance) {
-                krwBalance.decreaseAvailable(amount);
+            Balance bal = inv.getArgument(0);
+            synchronized (bal) {
+                bal.lock(amount);
             }
             return BigDecimal.ONE;
         }).when(marginCalculator).calculateAndApplyMargin(any(), any(), any(), any());

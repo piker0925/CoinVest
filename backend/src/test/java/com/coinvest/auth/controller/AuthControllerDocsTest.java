@@ -21,7 +21,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = AuthController.class, excludeAutoConfiguration = SecurityAutoConfiguration.class)
+@org.springframework.context.annotation.Import(AuthControllerDocsTest.RestTemplateBuilderConfig.class)
 class AuthControllerDocsTest extends RestDocsSupport {
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class RestTemplateBuilderConfig {
+        @org.springframework.context.annotation.Bean
+        public org.springframework.boot.web.client.RestTemplateBuilder restTemplateBuilder() {
+            return new org.springframework.boot.web.client.RestTemplateBuilder();
+        }
+    }
 
     @MockitoBean
     private AuthService authService;
@@ -30,16 +39,11 @@ class AuthControllerDocsTest extends RestDocsSupport {
     private com.coinvest.auth.service.TokenService tokenService;
 
     @MockitoBean
-    private org.springframework.boot.web.client.RestTemplateBuilder restTemplateBuilder;
-
-    @MockitoBean
     private com.coinvest.global.security.JwtTokenProvider jwtTokenProvider;
 
     @BeforeEach
     void setUp() {
-        given(restTemplateBuilder.setConnectTimeout(any())).willReturn(restTemplateBuilder);
-        given(restTemplateBuilder.setReadTimeout(any())).willReturn(restTemplateBuilder);
-        given(restTemplateBuilder.build()).willReturn(new org.springframework.web.client.RestTemplate());
+        // Removed RestTemplateBuilder mocking
     }
 
     @Test
@@ -60,7 +64,7 @@ class AuthControllerDocsTest extends RestDocsSupport {
                                 fieldWithPath("password").type(JsonFieldType.STRING).description("비밀번호")
                         ),
                         responseFields(
-                                fieldWithPath("status").type(JsonFieldType.STRING).description("응답 상태"),
+                                fieldWithPath("success").type(JsonFieldType.BOOLEAN).description("성공 여부"),
                                 fieldWithPath("message").type(JsonFieldType.STRING).description("응답 메시지").optional(),
                                 fieldWithPath("data.accessToken").type(JsonFieldType.STRING).description("액세스 토큰"),
                                 fieldWithPath("data.refreshToken").type(JsonFieldType.STRING).description("리프레시 토큰")

@@ -1,7 +1,9 @@
 package com.coinvest.trading.service;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.auth.domain.UserRole;
 import com.coinvest.fx.domain.Currency;
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.repository.OrderRepository;
 import com.coinvest.trading.repository.PositionRepository;
@@ -18,12 +20,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -67,7 +67,7 @@ class LimitOrderMatchingServiceTest {
 
     @BeforeEach
     void setUp() {
-        testUser = User.builder().id(1L).email("test@example.com").build();
+        testUser = User.builder().id(1L).email("test@example.com").role(UserRole.ADMIN).build();
         virtualAccount = VirtualAccount.builder()
                 .id(10L)
                 .user(testUser)
@@ -101,21 +101,21 @@ class LimitOrderMatchingServiceTest {
                 .type(OrderType.LIMIT)
                 .price(new BigDecimal("100000000"))
                 .quantity(new BigDecimal("0.1"))
+                .priceMode(PriceMode.LIVE)
                 .build();
 
         given(orderRepository.updateStatusToFilledIfPending(orderId)).willReturn(1);
         given(orderRepository.findById(orderId)).willReturn(Optional.of(order));
         given(virtualAccountRepository.findByUserId(testUser.getId())).willReturn(Optional.of(virtualAccount));
         given(balanceRepository.findByAccountIdAndCurrencyWithLock(anyLong(), any())).willReturn(Optional.of(krwBalance));
-        given(positionRepository.findByUserIdAndUniversalCode(anyLong(), anyString())).willReturn(Optional.empty());
+        given(positionRepository.findByUserIdAndUniversalCodeAndPriceMode(anyLong(), anyString(), any(PriceMode.class)))
+                .willReturn(Optional.empty());
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
 
         // when
         matchingService.executeBuyOrderInTransaction(orderId, currentPrice);
 
         // then
-        // 잠금 잔고 1000.5만 해제 -> 가용 잔고 1000만 + 1000.5만 = 2000.5만
-        // 실제 차감 1000.5만 (수수료 포함) -> 가용 잔고 1000만
         assertThat(krwBalance.getAvailable().compareTo(new BigDecimal("10000000"))).isEqualTo(0);
         assertThat(krwBalance.getLocked().compareTo(BigDecimal.ZERO)).isEqualTo(0);
     }
@@ -134,6 +134,7 @@ class LimitOrderMatchingServiceTest {
                 .side(OrderSide.SELL)
                 .type(OrderType.LIMIT)
                 .quantity(new BigDecimal("0.1"))
+                .priceMode(PriceMode.LIVE)
                 .build();
 
         Position position = Position.builder()
@@ -142,20 +143,21 @@ class LimitOrderMatchingServiceTest {
                 .avgBuyPrice(new BigDecimal("90000000"))
                 .quantity(new BigDecimal("0.1"))
                 .lockedQuantity(new BigDecimal("0.1"))
+                .priceMode(PriceMode.LIVE)
                 .build();
 
         given(orderRepository.updateStatusToFilledIfPending(orderId)).willReturn(1);
         given(orderRepository.findById(orderId)).willReturn(Optional.of(order));
         given(virtualAccountRepository.findByUserId(testUser.getId())).willReturn(Optional.of(virtualAccount));
         given(balanceRepository.findByAccountIdAndCurrencyWithLock(anyLong(), any())).willReturn(Optional.of(krwBalance));
-        given(positionRepository.findByUserIdAndUniversalCode(anyLong(), anyString())).willReturn(Optional.of(position));
+        given(positionRepository.findByUserIdAndUniversalCodeAndPriceMode(anyLong(), anyString(), any(PriceMode.class)))
+                .willReturn(Optional.of(position));
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
 
         // when
         matchingService.executeSellOrderInTransaction(orderId, currentPrice);
 
         // then
-        // 1000만 - 수수료 5000원 = 999.5만 증가
         BigDecimal expectedReturn = new BigDecimal("9995000");
         assertThat(krwBalance.getAvailable().compareTo(new BigDecimal("19995000"))).isEqualTo(0);
         assertThat(position.getQuantity().compareTo(BigDecimal.ZERO)).isEqualTo(0);

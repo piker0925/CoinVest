@@ -2,6 +2,7 @@ package com.coinvest.auth.service;
 
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
+import com.coinvest.auth.domain.UserRole;
 import com.coinvest.auth.dto.LoginRequest;
 import com.coinvest.auth.dto.SignupRequest;
 import com.coinvest.auth.dto.TokenResponse;
@@ -66,6 +67,11 @@ public class AuthService {
 
         if (!user.isActive()) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        if (user.getRole() == UserRole.BOT) {
+            loginFailureService.increaseAttempts(request.getEmail());
+            throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
