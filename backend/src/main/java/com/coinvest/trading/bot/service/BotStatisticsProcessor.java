@@ -119,10 +119,33 @@ public class BotStatisticsProcessor {
         BigDecimal returnRate = calculateReturnRate(history);
         BigDecimal mdd = calculateMdd(history);
         BigDecimal winRate = calculateWinRate(history);
-        BigDecimal sharpeRatio = BigDecimal.ZERO; // TODO: 샤프지수 계산 로직 추가
+        BigDecimal sharpeRatio = calculateSharpeRatio(history);
         int tradeCount = history.size();
 
         upsertStatistics(bot, period, returnRate, mdd, sharpeRatio, winRate, tradeCount);
+    }
+
+    private BigDecimal calculateSharpeRatio(List<BotPerformance> history) {
+        if (history.size() < MIN_DATA_POINTS) return BigDecimal.ZERO;
+
+        BigDecimal sumReturns = BigDecimal.ZERO;
+        for (BotPerformance p : history) {
+            sumReturns = sumReturns.add(p.getDailyReturnRate());
+        }
+        BigDecimal mean = sumReturns.divide(BigDecimal.valueOf(history.size()), 8, RoundingMode.HALF_UP);
+
+        BigDecimal sumSquaredDiff = BigDecimal.ZERO;
+        for (BotPerformance p : history) {
+            BigDecimal diff = p.getDailyReturnRate().subtract(mean);
+            sumSquaredDiff = sumSquaredDiff.add(diff.multiply(diff));
+        }
+        BigDecimal variance = sumSquaredDiff.divide(BigDecimal.valueOf(history.size()), 8, RoundingMode.HALF_UP);
+
+        double stdDevDouble = Math.sqrt(variance.doubleValue());
+        if (stdDevDouble == 0.0) return BigDecimal.ZERO;
+
+        BigDecimal stdDev = BigDecimal.valueOf(stdDevDouble);
+        return mean.divide(stdDev, 4, RoundingMode.HALF_UP);
     }
 
     private List<BotPerformance> getHistory(TradingBot bot, String period) {
