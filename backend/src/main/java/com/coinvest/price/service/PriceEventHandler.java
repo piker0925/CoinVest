@@ -13,9 +13,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -31,6 +33,42 @@ public class PriceEventHandler implements MessageListener {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
+    private static final long CANDLE_INTERVAL_MS = 5 * 60 * 1000; // 5분
+    private static final int MAX_WINDOW_SIZE = 120;
+
+    /**
+     * Time Bucketing의 원자성을 완벽히 보장하는 Lua 스크립트.
+     * 슬롯 확인(GET) -> 조건에 따른 LSET 또는 LPUSH+LTRIM 로직을 단일 트랜잭션으로 묶어
+     * 120개 초과 현상 및 캔들 중복 생성(Race Condition)을 원천 차단함.
+     */
+    private static final DefaultRedisScript<Long> BUCKET_SCRIPT;
+
+    static {
+        BUCKET_SCRIPT = new DefaultRedisScript<>();
+        BUCKET_SCRIPT.setScriptText(
+            "local slotKey = KEYS[1]; " +
+            "local windowKey = KEYS[2]; " +
+            "local currentSlot = ARGV[1]; " +
+            "local priceStr = ARGV[2]; " +
+            "local maxWindowSize = tonumber(ARGV[3]); " +
+            "local lastSlot = redis.call('GET', slotKey); " +
+            "if lastSlot == currentSlot then " +
+            "    local len = redis.call('LLEN', windowKey); " +
+            "    if len > 0 then " +
+            "        redis.call('LSET', windowKey, 0, priceStr); " +
+            "    else " +
+            "        redis.call('LPUSH', windowKey, priceStr); " +
+            "    end " +
+            "else " +
+            "    redis.call('SETEX', slotKey, 86400, currentSlot); " +
+            "    redis.call('LPUSH', windowKey, priceStr); " +
+            "    redis.call('LTRIM', windowKey, 0, maxWindowSize - 1); " +
+            "end " +
+            "return 1;"
+        );
+        BUCKET_SCRIPT.setResultType(Long.class);
+    }
+
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
@@ -43,6 +81,9 @@ public class PriceEventHandler implements MessageListener {
 
             // 1. 최신 가격 저장 (TTL 60초)
             redisTemplate.opsForValue().set(key, event.getTradePrice(), Duration.ofSeconds(60));
+
+            // 1-1. 봇 전략 지표 계산용 가격 윈도우 갱신 (Time Bucketing)
+            appendToPriceWindow(universalCode, event.getTradePrice(), event.getTradeTimestamp(), mode);
 
             // 2. 내부 리스너들을 위한 가격 업데이트 이벤트 발행
             eventPublisher.publishEvent(new TickerUpdatedEvent(event));
@@ -71,6 +112,31 @@ public class PriceEventHandler implements MessageListener {
 
         } catch (Exception e) {
             log.error("Failed to handle Redis price message", e);
+        }
+    }
+
+    /**
+     * Time Bucketing 로직: 틱(Tick) 수신 시 실시간으로 5분봉 종가를 캐싱.
+     * Lua 스크립트를 사용하여 '슬롯 확인(Check) -> 갱신(Act)' 과정의 Race Condition을 원천 차단함.
+     */
+    private void appendToPriceWindow(String universalCode, Object price, Long timestamp, PriceMode mode) {
+        try {
+            long currentSlot = (timestamp != null ? timestamp : System.currentTimeMillis()) / CANDLE_INTERVAL_MS;
+            
+            String slotKey = RedisKeyConstants.getPriceWindowSlotKey(mode, universalCode);
+            String windowKey = RedisKeyConstants.getPriceWindowKey(mode, universalCode);
+            
+            String priceStr = price.toString();
+            String currentSlotStr = String.valueOf(currentSlot);
+            String maxWindowSizeStr = String.valueOf(MAX_WINDOW_SIZE);
+
+            redisTemplate.execute(
+                    BUCKET_SCRIPT, 
+                    List.of(slotKey, windowKey), 
+                    currentSlotStr, priceStr, maxWindowSizeStr
+            );
+        } catch (Exception e) {
+            log.warn("Failed to bucket price window for {}: {}", universalCode, e.getMessage());
         }
     }
 }

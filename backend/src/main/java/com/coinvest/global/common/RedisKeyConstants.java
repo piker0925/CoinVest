@@ -20,6 +20,9 @@ public final class RedisKeyConstants {
     private static final String LIMIT_ORDER_TEMPLATE = "trading:limit-order:%s:%s";
     private static final String BENCHMARK_TEMPLATE = "benchmark:%s";
     private static final String BENCHMARK_HISTORY_TEMPLATE = "benchmark:history:%s";
+    private static final String PRICE_WINDOW_TEMPLATE = "price:window:%s";
+    private static final String PRICE_WINDOW_SLOT_TEMPLATE = "price:window:slot:%s";
+    private static final String PORTFOLIO_SNAPSHOT_HISTORY_TEMPLATE = "portfolio:snapshot:%d";
 
     // --- Common ---
     public static final String LOGIN_FAIL_COUNT_KEY = "auth:login-fail:%s";
@@ -64,6 +67,30 @@ public final class RedisKeyConstants {
 
     public static String getBenchmarkHistoryKey(PriceMode mode, String code) {
         return mode.getPrefixKey(String.format(BENCHMARK_HISTORY_TEMPLATE, code));
+    }
+
+    /**
+     * 포트폴리오 일별 스냅샷 이력 (Redis ZSet).
+     * Score: LocalDate.toEpochDay(), Value: JSON {totalValueBase, netContribution}
+     * 90일 보존. BenchmarkService에서 기간별 수익률 계산 시 빠른 조회용.
+     */
+    public static String getPortfolioSnapshotHistoryKey(PriceMode mode, Long portfolioId) {
+        return mode.getPrefixKey(String.format(PORTFOLIO_SNAPSHOT_HISTORY_TEMPLATE, portfolioId));
+    }
+
+    /**
+     * 봇 전략 지표 계산용 가격 윈도우 (Redis LIST).
+     * 최근 120개 5분봉 스냅샷 유지.
+     */
+    public static String getPriceWindowKey(PriceMode mode, String universalCode) {
+        return mode.getPrefixKey(String.format(PRICE_WINDOW_TEMPLATE, universalCode));
+    }
+
+    /**
+     * 봇 전략 가격 윈도우의 현재 진행 중인 5분 슬롯 Timestamp 캐시.
+     */
+    public static String getPriceWindowSlotKey(PriceMode mode, String universalCode) {
+        return mode.getPrefixKey(String.format(PRICE_WINDOW_SLOT_TEMPLATE, universalCode));
     }
 
     public static String format(String format, Object... args) {
