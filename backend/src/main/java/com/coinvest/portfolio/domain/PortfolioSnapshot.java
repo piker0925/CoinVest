@@ -37,7 +37,7 @@ public class PortfolioSnapshot extends BaseEntity {
     private LocalDateTime snapshotDate;
 
     @Column(name = "total_evaluation_base", nullable = false, precision = 38, scale = 20)
-    private BigDecimal totalEvaluationBase;
+    private BigDecimal totalEvaluationBase; // 필드명 수정: totalValueBase -> totalEvaluationBase
 
     @Column(name = "net_contribution", nullable = false, precision = 38, scale = 20)
     private BigDecimal netContribution;

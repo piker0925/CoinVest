@@ -2,7 +2,6 @@ package com.coinvest.dashboard.service;
 
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRole;
-import com.coinvest.global.common.PriceMode;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioSnapshot;
 import com.coinvest.portfolio.dto.PortfolioValuation;
@@ -18,9 +17,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -58,12 +57,15 @@ class BenchmarkServiceTest {
             .email("test@example.com")
             .role(UserRole.USER)
             .build();
+        // ID 강제 주입 (Reflection)
+        ReflectionTestUtils.setField(testUser, "id", userId);
 
         testPortfolio = Portfolio.builder()
             .name("Test Portfolio")
             .user(testUser)
             .netContribution(new BigDecimal("1000000"))
             .build();
+        ReflectionTestUtils.setField(testPortfolio, "id", portfolioId);
     }
 
     @Test
@@ -93,10 +95,6 @@ class BenchmarkServiceTest {
         PerformanceResponse response = benchmarkService.getMyPerformance(portfolioId, userId, period);
 
         // then
-        // totalValueNow = 1,250,000 | ncNow = 1,100,000
-        // vStart = 1,000,000 | ncStart = 1,000,000
-        // ncDelta = 100,000
-        // return = (1,250,000 - 1,000,000 - 100,000) / 1,000,000 = 15%
         assertThat(response.getReturnRate()).isEqualByComparingTo("15.00");
     }
 }
