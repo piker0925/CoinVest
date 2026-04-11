@@ -22,12 +22,20 @@ jobs:
       - name: Run Backend Tests
         run: |
           chmod +x backend/gradlew
-          cd backend && ./gradlew test
+          cd backend && ./gradlew test --continue
         env:
           JWT_SECRET: dummy_secret_key_for_ci_test_at_least_64_chars_long_!!_1234567890
           APP_SECURITY_AES_KEY: dummy_32_byte_aes_key_for_ci_test_!!
           KIS_APP_KEY: dummy_key
           KIS_APP_SECRET: dummy_secret
+
+      # 테스트 실패 시에도 리포트 보관 (디버깅 용도)
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: backend/build/reports/tests/test/
 
       - name: Build Backend JAR
         if: success()
@@ -61,7 +69,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-frontend:latest
-      # 🚀 빌드 단계 실패 알림 추가
+
+      # 빌드 단계 실패 알림
       - name: Discord Notification (Build Failure)
         if: failure()
         uses: sarisia/actions-status-discord@v1
@@ -71,7 +80,7 @@ jobs:
           title: "❌ CoinVest 빌드/테스트 실패"
           description: |
             **단계**: `Build & Push`
-            **사유**: 코드 컴파일 또는 단위 테스트 실패
+            **사유**: 코드 컴파일 또는 단위 테스트 실패 (리포트 확인 요망)
             **커밋**: `${{ github.event.head_commit.message }}`
           color: 0xff0000
 
@@ -107,31 +116,31 @@ jobs:
             
             # 1. [인프라 안정성] Redis 준비 상태 확인 및 초기화
             echo "Checking Redis health..."
+            SUCCESS=false
             for i in {1..20}; do
               if docker-compose exec -T redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
                 echo "Redis is ready!"
                 docker-compose exec -T redis redis-cli flushall
+                SUCCESS=true
                 break
               fi
               sleep 1
             done
+            if [ "$SUCCESS" = false ]; then echo "Redis timeout"; exit 1; fi
             
             # 2. [서비스 무결성] 웹 서비스(Nginx/Frontend) 최종 응답 확인
             echo "Waiting for Web Service to be ready..."
             WEB_READY=0
             for i in {1..30}; do
-              # HTTP 200~399 응답 확인
               if curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "^[23]"; then
-                echo "✅ Web Service is UP and serving traffic!"
+                echo "✅ Web Service is UP!"
                 WEB_READY=1
                 break
               fi
-              echo "Web Service is warming up... ($i/30)"
               sleep 2
             done
             
             if [ "$WEB_READY" = 0 ]; then
-              echo "🚨 CRITICAL: Web Service failed to start. Dumping logs for debugging:"
               docker-compose logs --tail=50 backend
               exit 1
             fi
