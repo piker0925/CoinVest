@@ -45,13 +45,31 @@ logs/
 # Node (프론트엔드)
 node_modules/
 dist/
+.next/
+.vercel
+out/
+build/
 npm-debug.log*
 yarn-error.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp*
+.pnp.js
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.local
+*-local.yml
+*-local.properties
 
 # Temp
 tmp/
