@@ -1,0 +1,25 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        use_sql_comments: false
+
+  # 운영 환경에서는 데이터 초기화 금지
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    root: INFO
+    com.coinvest: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] %logger{36} - %msg%n"
