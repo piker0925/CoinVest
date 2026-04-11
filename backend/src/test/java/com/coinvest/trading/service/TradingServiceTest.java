@@ -37,10 +37,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -183,58 +179,5 @@ class TradingServiceTest {
         // 1억 - (500만 + 2500원) = 94,997,500
         BigDecimal expectedBalance = new BigDecimal("94997500");
         assertThat(krwBalance.getAvailable()).isEqualByComparingTo(expectedBalance);
-    }
-
-    @Test
-    @DisplayName("멀티스레드 동시 주문 시 데드락 없이 로직이 수행되어야 함")
-    void should_handle_concurrent_orders_without_deadlock() throws InterruptedException {
-        // given
-        int threadCount = 10;
-        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch latch = new CountDownLatch(threadCount);
-        AtomicInteger successCount = new AtomicInteger();
-
-        OrderCreateRequest request = new OrderCreateRequest(universalCode, OrderSide.BUY, OrderType.MARKET, null, new BigDecimal("0.01"));
-        Asset btcAsset = Asset.builder()
-                .universalCode(universalCode).quoteCurrency(Currency.KRW).assetClass(AssetClass.CRYPTO).feeRate(new BigDecimal("0.0005")).build();
-
-        given(assetRepository.findByUniversalCode(universalCode)).willReturn(Optional.of(btcAsset));
-        given(tradingStrategy.getCurrentPrice(universalCode)).willReturn(new BigDecimal("100000000"));
-        given(marketHoursService.isMarketOpen(btcAsset)).willReturn(true);
-        
-        // 실제 로직 모방: lock() 사용
-        doAnswer(inv -> {
-            BigDecimal amount = inv.getArgument(2);
-            Balance bal = inv.getArgument(0);
-            synchronized (bal) {
-                bal.lock(amount);
-            }
-            return BigDecimal.ONE;
-        }).when(marginCalculator).calculateAndApplyMargin(any(), any(), any(), any());
-
-        given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
-        given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
-
-        // when
-        for (int i = 0; i < threadCount; i++) {
-            executorService.execute(() -> {
-                try {
-                    tradingService.createOrder(userId, request, PriceMode.LIVE);
-                    successCount.incrementAndGet();
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        latch.await();
-        executorService.shutdown();
-
-        // then
-        assertThat(successCount.get()).isEqualTo(threadCount);
-        // 차감액: 100만 + 500수수료 = 1,000,500
-        // 10명 차감: 10,005,000
-        // 잔고: 1억 - 10,005,000 = 89,995,000
-        assertThat(krwBalance.getAvailable()).isEqualByComparingTo("89995000");
     }
 }

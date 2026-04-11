@@ -22,6 +22,10 @@ services:
     container_name: coinvest-frontend
     expose:
       - "3000"
+    deploy:
+      resources:
+        limits:
+          memory: 300M
     env_file:
       - .env
     environment:
@@ -39,10 +43,15 @@ services:
     container_name: coinvest-app
     expose:
       - "8080"
+    deploy:
+      resources:
+        limits:
+          memory: 450M
     env_file:
       - .env
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - JAVA_OPTS=-Xmx256m -Xms256m
       - TZ=Asia/Seoul
     depends_on:
       db:
@@ -56,6 +65,10 @@ services:
   db:
     image: postgres:16-alpine
     container_name: coinvest-db
+    deploy:
+      resources:
+        limits:
+          memory: 150M
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-coinvest}
       - POSTGRES_USER=${POSTGRES_USER:-coinvest}
@@ -75,18 +88,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: coinvest-redis
-    environment:
-      - TZ=Asia/Seoul
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - coinvest-network
-    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 100M
 
 networks:
   coinvest-network:
