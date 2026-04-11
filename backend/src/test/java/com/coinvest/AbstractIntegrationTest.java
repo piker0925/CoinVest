@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -16,15 +17,15 @@ import java.util.TimeZone;
 
 /**
  * 통합 테스트 공통 기반 클래스.
- * 생명주기 제어권을 뺏어가는 @Testcontainers, @Container, @ServiceConnection을 모두 제거하고,
- * 오직 수동 싱글톤 패턴(static block + @DynamicPropertySource)만 사용하여 
- * Spring 컨텍스트 재시작 시에도 도커 연결 무결성을 100% 보장함.
+ * 1. 수동 싱글톤 패턴으로 도커 생명주기 관리.
+ * 2. @DirtiesContext를 통해 테스트 클래스 간 컨텍스트 간섭 원천 차단 (Spring Boot 3.4 대응).
+ * 3. 템플릿 패턴을 이용한 정석적인 데이터 격리 및 예외 처리.
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class AbstractIntegrationTest {
 
-    // 정적 싱글톤 컨테이너 선언
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("coinvest_test")
             .withUsername("test")
@@ -34,10 +35,7 @@ public abstract class AbstractIntegrationTest {
             .withExposedPorts(6379);
 
     static {
-        // [잠재 리스크 해결] 서버 환경(UTC)에 상관없이 한국 시간 기준으로 테스트 수행
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
-        
-        // JVM 기동 시 컨테이너를 단 한 번만 시작 (JUnit 확장에 의존하지 않음)
         POSTGRES.start();
         REDIS.start();
     }
@@ -45,9 +43,6 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    /**
-     * Spring 컨텍스트가 로드될 때마다 컨테이너의 연결 정보를 수동으로 강제 주입.
-     */
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -65,12 +60,13 @@ public abstract class AbstractIntegrationTest {
     void clearRedis() {
         if (redisTemplate != null) {
             try {
-                // [정석] execute()를 사용하여 커넥션 누수를 원천 차단하고 명령을 안전하게 수행
+                // [정석] execute() 콜백을 사용하여 커넥션 누수를 방지하고 데이터를 초기화
                 redisTemplate.execute((RedisConnection connection) -> {
                     connection.serverCommands().flushAll();
                     return null;
                 });
             } catch (Exception e) {
+                // 회피 금지: 데이터 오염 방지를 위해 실패 시 즉시 중단 및 상세 보고
                 String msg = "🚨 Redis Flush Failed! Critical for test isolation. Reason: " + e.getMessage();
                 System.err.println(msg);
                 throw new RuntimeException(msg, e);
