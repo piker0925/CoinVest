@@ -1,7 +1,7 @@
 -- Phase 6A: 봇 전략 엔진 테이블 (수정: StrategyType 명칭 통일 및 성능 지표 고도화)
 
 -- 봇 설정
-CREATE TABLE trading_bots (
+CREATE TABLE IF NOT EXISTS trading_bots (
     id             BIGSERIAL PRIMARY KEY,
     user_id        BIGINT NOT NULL UNIQUE REFERENCES users(id),
     strategy_type  VARCHAR(30) NOT NULL, -- signal_type -> strategy_type
@@ -13,7 +13,7 @@ CREATE TABLE trading_bots (
 );
 
 -- 봇 일일 자산 스냅샷 (다기간 통계 계산 원본)
-CREATE TABLE bot_performances (
+CREATE TABLE IF NOT EXISTS bot_performances (
     id                BIGSERIAL PRIMARY KEY,
     bot_id            BIGINT NOT NULL REFERENCES trading_bots(id),
     snapshot_date     DATE NOT NULL,
@@ -25,10 +25,10 @@ CREATE TABLE bot_performances (
     UNIQUE (bot_id, snapshot_date)
 );
 
-CREATE INDEX idx_bot_perf_bot_date ON bot_performances(bot_id, snapshot_date DESC);
+CREATE INDEX IF NOT EXISTS idx_bot_perf_bot_date ON bot_performances(bot_id, snapshot_date DESC);
 
 -- 봇 다기간 집계 통계 (배치 갱신, API 조회용)
-CREATE TABLE bot_statistics (
+CREATE TABLE IF NOT EXISTS bot_statistics (
     id           BIGSERIAL PRIMARY KEY,
     bot_id       BIGINT NOT NULL REFERENCES trading_bots(id),
     period       VARCHAR(10) NOT NULL,  -- '1M', '3M', 'ALL'
