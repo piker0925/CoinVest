@@ -12,7 +12,6 @@ import java.math.RoundingMode;
 
 /**
  * 포지션 엔티티.
- * 사용자가 현재 보유 중인 자산(코인) 현황을 관리함.
  */
 @Entity
 @Table(name = "positions", uniqueConstraints = {
@@ -43,51 +42,30 @@ public class Position extends BaseEntity {
     @Column(nullable = false, length = 10)
     private Currency currency;
 
-    /**
-     * 실행 모드 (LIVE, DEMO).
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "price_mode", nullable = false, length = 20)
     @Builder.Default
     private PriceMode priceMode = PriceMode.LIVE;
 
-    /**
-     * 평균 매수 단가.
-     */
-    @Column(name = "avg_buy_price", nullable = false, precision = 30, scale = 18)
+    @Column(name = "avg_buy_price", nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal avgBuyPrice = BigDecimal.ZERO;
 
-    /**
-     * 보유 수량 (가용 + 잠금).
-     */
-    @Column(nullable = false, precision = 30, scale = 18)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal quantity;
 
-    /**
-     * 잠금 수량 (지정가 매도 주문 시 사용).
-     */
-    @Column(name = "locked_quantity", nullable = false, precision = 30, scale = 18)
+    @Column(name = "locked_quantity", nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal lockedQuantity = BigDecimal.ZERO;
 
-    /**
-     * 실현 손익 (수수료 제외 순수익).
-     */
-    @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
+    @Column(name = "realized_pnl", nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal realizedPnl = BigDecimal.ZERO;
 
-    /**
-     * 가용 수량 조회.
-     */
     public BigDecimal getAvailableQuantity() {
         return quantity.subtract(lockedQuantity);
     }
 
-    /**
-     * 지정가 매도 주문 시 수량 잠금.
-     */
     public void lockQuantity(BigDecimal amount) {
         if (getAvailableQuantity().compareTo(amount) < 0) {
             throw new com.coinvest.global.exception.BusinessException(com.coinvest.global.exception.ErrorCode.TRADING_INSUFFICIENT_QUANTITY);
@@ -95,16 +73,10 @@ public class Position extends BaseEntity {
         this.lockedQuantity = this.lockedQuantity.add(amount);
     }
 
-    /**
-     * 지정가 취소 또는 체결 시 잠금 해제.
-     */
     public void unlockQuantity(BigDecimal amount) {
         this.lockedQuantity = this.lockedQuantity.subtract(amount);
     }
 
-    /**
-     * 매수 시 포지션 갱신 (가중 평균가 계산).
-     */
     public void addPosition(BigDecimal price, BigDecimal amount) {
         BigDecimal totalCost = this.avgBuyPrice.multiply(this.quantity)
                 .add(price.multiply(amount));
@@ -115,15 +87,11 @@ public class Position extends BaseEntity {
         }
     }
 
-    /**
-     * 매도 시 포지션 갱신 및 실현 손익 누적.
-     */
     public void subtractPosition(BigDecimal price, BigDecimal amount) {
         if (getAvailableQuantity().compareTo(amount) < 0) {
             throw new com.coinvest.global.exception.BusinessException(com.coinvest.global.exception.ErrorCode.TRADING_INSUFFICIENT_QUANTITY);
         }
 
-        // 실현 손익 = (매도가 - 평단) * 매도수량
         BigDecimal pnl = price.subtract(this.avgBuyPrice).multiply(amount);
         this.realizedPnl = this.realizedPnl.add(pnl);
         

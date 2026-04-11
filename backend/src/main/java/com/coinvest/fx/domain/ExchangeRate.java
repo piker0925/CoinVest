@@ -5,7 +5,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -28,11 +27,11 @@ public class ExchangeRate extends BaseEntity {
     @Column(nullable = false, length = 10)
     private Currency quoteCurrency;
 
-    @Column(nullable = false, precision = 20, scale = 6)
+    @Column(nullable = false, precision = 20, scale = 6) // DB 스키마에 맞춰 (20, 6)으로 수정
     private BigDecimal rate;
 
     @Column(nullable = false)
-    private LocalDate snapshotDate;
+    private LocalDateTime snapshotDate;
 
     @Column(nullable = false)
     private LocalDateTime fetchedAt;

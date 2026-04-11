@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 정산 엔티티 (T+2 주식 정산 등).
+ * 정산 엔티티.
  */
 @Entity
 @Table(name = "settlements")
@@ -37,7 +37,7 @@ public class Settlement extends BaseEntity {
     @Column(nullable = false, length = 10)
     private Currency currency;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal amount;
 
     @Column(name = "settlement_date", nullable = false)
@@ -48,9 +48,6 @@ public class Settlement extends BaseEntity {
     @Builder.Default
     private SettlementStatus status = SettlementStatus.PENDING;
 
-    /**
-     * 실행 모드 (LIVE, DEMO).
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "price_mode", nullable = false, length = 20)
     @Builder.Default

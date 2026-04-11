@@ -108,7 +108,7 @@ public class BenchmarkService {
                         .multiply(BigDecimal.valueOf(100));
             } else {
                 PortfolioSnapshot startSnapshot = startSnapshotOpt.get();
-                BigDecimal vStart = startSnapshot.getTotalValueBase();
+                BigDecimal vStart = startSnapshot.getTotalEvaluationBase();
                 BigDecimal ncStart = startSnapshot.getNetContribution();
 
                 if (vStart.compareTo(BigDecimal.ZERO) == 0) {

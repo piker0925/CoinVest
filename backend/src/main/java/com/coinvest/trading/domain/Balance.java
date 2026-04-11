@@ -34,22 +34,18 @@ public class Balance extends BaseEntity {
     @Column(nullable = false, length = 10)
     private Currency currency;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal available = BigDecimal.ZERO;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal locked = BigDecimal.ZERO;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     @Builder.Default
     private BigDecimal unsettled = BigDecimal.ZERO;
 
-    /**
-     * 단순 조회 후 수정 시 발생할 수 있는 Lost Update 방지용 (Low-contention 상황)
-     * 핵심 트레이딩 로직에서는 PESSIMISTIC_WRITE 락을 별도로 사용해야 함.
-     */
     @Version
     @Column(nullable = false)
     private Long version;
@@ -85,7 +81,6 @@ public class Balance extends BaseEntity {
     }
 
     public void lock(BigDecimal amount) {
-        // available에서 부족하면 unsettled에서 가져옴 (통합증거금 및 재투자 로직 대응)
         if (available.compareTo(amount) >= 0) {
             this.available = this.available.subtract(amount);
             this.locked = this.locked.add(amount);
@@ -110,7 +105,6 @@ public class Balance extends BaseEntity {
     }
 
     public void settle(BigDecimal amount) {
-        // T+2 정산 도래 시 unsettled -> available
         this.unsettled = this.unsettled.subtract(amount);
         this.available = this.available.add(amount);
     }

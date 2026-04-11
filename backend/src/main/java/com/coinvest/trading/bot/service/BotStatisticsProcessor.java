@@ -1,5 +1,8 @@
 package com.coinvest.trading.bot.service;
 
+import com.coinvest.fx.domain.Currency;
+import com.coinvest.global.common.PriceMode;
+import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.bot.domain.BotPerformance;
 import com.coinvest.trading.bot.domain.BotStatistics;
 import com.coinvest.trading.bot.domain.TradingBot;
@@ -11,21 +14,17 @@ import com.coinvest.trading.domain.VirtualAccount;
 import com.coinvest.trading.repository.BalanceRepository;
 import com.coinvest.trading.repository.PositionRepository;
 import com.coinvest.trading.repository.VirtualAccountRepository;
-import com.coinvest.price.service.PriceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 봇 통계 계산의 트랜잭션 단위 처리.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -41,12 +40,9 @@ public class BotStatisticsProcessor {
     private static final List<String> PERIODS = List.of("1M", "3M", "ALL");
     private static final int MIN_DATA_POINTS = 2;
 
-    /**
-     * 봇 1마리의 스냅샷 저장 + 통계 갱신을 하나의 독립 트랜잭션으로 처리.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void process(TradingBot bot) {
-        LocalDate today = LocalDate.now();
+    @Transactional
+    public void processBotStatistics(TradingBot bot) {
+        LocalDateTime today = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
 
         // 1. 이미 오늘 스냅샷이 있으면 멱등성 보장
         if (performanceRepository.findByBotAndSnapshotDate(bot, today).isPresent()) {
@@ -58,7 +54,6 @@ public class BotStatisticsProcessor {
         BigDecimal totalValue = calculateTotalAssetValue(bot);
         BigDecimal dailyReturn = calculateDailyReturn(bot, today, totalValue);
         
-        // net_contribution은 현재 시뮬레이션에서는 0 또는 초기 자산으로 설정 (추후 보완)
         BigDecimal netContribution = BigDecimal.ZERO; 
 
         performanceRepository.save(BotPerformance.builder()
@@ -98,8 +93,8 @@ public class BotStatisticsProcessor {
         return cash.add(positionValue);
     }
 
-    private BigDecimal calculateDailyReturn(TradingBot bot, LocalDate today, BigDecimal todayValue) {
-        LocalDate yesterday = today.minusDays(1);
+    private BigDecimal calculateDailyReturn(TradingBot bot, LocalDateTime today, BigDecimal todayValue) {
+        LocalDateTime yesterday = today.minusDays(1);
         return performanceRepository.findByBotAndSnapshotDate(bot, yesterday)
                 .map(prev -> {
                     if (prev.getTotalAssetValue().compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
@@ -149,7 +144,7 @@ public class BotStatisticsProcessor {
     }
 
     private List<BotPerformance> getHistory(TradingBot bot, String period) {
-        LocalDate now = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
         return switch (period) {
             case "1M" -> performanceRepository.findByBotAndSnapshotDateGreaterThanEqualOrderBySnapshotDateAsc(
                     bot, now.minusMonths(1));

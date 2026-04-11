@@ -130,7 +130,7 @@ public class ExchangeRateService {
                     .baseCurrency(Currency.USD)
                     .quoteCurrency(Currency.KRW)
                     .rate(fetchedRate)
-                    .snapshotDate(LocalDate.now())
+                    .snapshotDate(LocalDateTime.now())
                     .fetchedAt(LocalDateTime.now())
                     .build();
 

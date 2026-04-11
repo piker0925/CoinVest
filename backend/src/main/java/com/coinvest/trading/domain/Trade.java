@@ -40,24 +40,21 @@ public class Trade extends BaseEntity {
     @Column(nullable = false, length = 10)
     private Currency currency;
 
-    @Column(name = "exchange_rate_snapshot", precision = 20, scale = 6)
+    @Column(name = "exchange_rate_snapshot", precision = 20, scale = 6) // DB 스키마에 맞춰 (20, 6)으로 수정
     private BigDecimal exchangeRateSnapshot;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal price;
 
-    @Column(nullable = false, precision = 30, scale = 18)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal quantity;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal fee;
 
-    @Column(name = "realized_pnl", nullable = false, precision = 20, scale = 4)
+    @Column(name = "realized_pnl", nullable = false, precision = 38, scale = 20)
     private BigDecimal realizedPnl;
 
-    /**
-     * 실행 모드 (LIVE, DEMO).
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "price_mode", nullable = false, length = 20)
     @Builder.Default

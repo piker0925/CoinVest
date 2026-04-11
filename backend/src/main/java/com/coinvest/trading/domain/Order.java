@@ -45,9 +45,6 @@ public class Order extends BaseEntity {
     @Column(name = "asset_class", nullable = false, length = 20)
     private AssetClass assetClass;
 
-    /**
-     * 실행 모드 (LIVE, DEMO).
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "price_mode", nullable = false, length = 20)
     @Builder.Default
@@ -61,16 +58,10 @@ public class Order extends BaseEntity {
     @Column(name = "order_type", nullable = false)
     private OrderType type;
 
-    /**
-     * 주문 가격 (시장가 주문 시 null일 수 있음).
-     */
-    @Column(precision = 20, scale = 4)
+    @Column(precision = 38, scale = 20)
     private BigDecimal price;
 
-    /**
-     * 주문 수량.
-     */
-    @Column(nullable = false, precision = 30, scale = 18)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)
@@ -83,37 +74,22 @@ public class Order extends BaseEntity {
     @Column(name = "reservation_triggered_at")
     private LocalDateTime reservationTriggeredAt;
 
-    /**
-     * 체결 시각.
-     */
     @Column(name = "filled_at")
     private LocalDateTime filledAt;
 
-    /**
-     * 예약 주문 실행 처리.
-     */
     public void triggerReservation() {
         this.reservationTriggeredAt = LocalDateTime.now();
     }
 
-    /**
-     * 주문 체결 처리.
-     */
     public void fill() {
         this.status = OrderStatus.FILLED;
         this.filledAt = LocalDateTime.now();
     }
 
-    /**
-     * 주문 취소 처리.
-     */
     public void cancel() {
         this.status = OrderStatus.CANCELLED;
     }
 
-    /**
-     * 주문 만료 처리.
-     */
     public void expire() {
         this.status = OrderStatus.EXPIRED;
     }

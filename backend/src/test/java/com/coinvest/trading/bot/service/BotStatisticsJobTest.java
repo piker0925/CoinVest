@@ -8,12 +8,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.Arrays;
 import java.util.List;
 
-import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,34 +26,52 @@ class BotStatisticsJobTest {
     private BotStatisticsProcessor statisticsProcessor;
 
     @Test
-    @DisplayName("봇 통계 배치 처리 중 1개 봇에서 예외가 발생하더라도 다음 봇은 정상적으로 처리되어야 한다 (결함 전파 차단)")
-    void should_continue_processing_when_one_bot_fails() {
+    @DisplayName("모든 봇에 대해 통계 처리가 수행되어야 함")
+    void execute_shouldProcessAllBots() {
         // given
-        TradingBot bot1 = TradingBot.builder().build();
-        ReflectionTestUtils.setField(bot1, "id", 1L);
-
-        TradingBot bot2 = TradingBot.builder().build();
-        ReflectionTestUtils.setField(bot2, "id", 2L);
-
-        TradingBot bot3 = TradingBot.builder().build();
-        ReflectionTestUtils.setField(bot3, "id", 3L);
-
-        List<TradingBot> bots = Arrays.asList(bot1, bot2, bot3);
-
-        given(botRepository.findAll()).willReturn(bots);
-
-        // 2번 봇 처리 시 예외 발생
-        doNothing().when(statisticsProcessor).process(bot1);
-        doThrow(new RuntimeException("Processing Error for Bot 2")).when(statisticsProcessor).process(bot2);
-        doNothing().when(statisticsProcessor).process(bot3);
+        TradingBot bot1 = mock(TradingBot.class);
+        TradingBot bot2 = mock(TradingBot.class);
+        TradingBot bot3 = mock(TradingBot.class);
+        
+        when(bot1.getId()).thenReturn(1L);
+        when(bot2.getId()).thenReturn(2L);
+        when(bot3.getId()).thenReturn(3L);
+        
+        when(botRepository.findAll()).thenReturn(List.of(bot1, bot2, bot3));
 
         // when
-        botStatisticsJob.execute();
+        botStatisticsJob.runDailyBotStatistics();
 
         // then
-        // 2번이 실패했음에도 불구하고 1, 2, 3 모두 process가 호출되었는지 검증
-        verify(statisticsProcessor, times(1)).process(bot1);
-        verify(statisticsProcessor, times(1)).process(bot2);
-        verify(statisticsProcessor, times(1)).process(bot3);
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot1);
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot2);
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot3);
+    }
+
+    @Test
+    @DisplayName("특정 봇 처리 실패 시에도 다른 봇 처리는 계속되어야 함")
+    void execute_shouldContinueOnException() {
+        // given
+        TradingBot bot1 = mock(TradingBot.class);
+        TradingBot bot2 = mock(TradingBot.class);
+        TradingBot bot3 = mock(TradingBot.class);
+        
+        when(bot1.getId()).thenReturn(1L);
+        when(bot2.getId()).thenReturn(2L);
+        when(bot3.getId()).thenReturn(3L);
+
+        when(botRepository.findAll()).thenReturn(List.of(bot1, bot2, bot3));
+        
+        doNothing().when(statisticsProcessor).processBotStatistics(bot1);
+        doThrow(new RuntimeException("Error")).when(statisticsProcessor).processBotStatistics(bot2);
+        doNothing().when(statisticsProcessor).processBotStatistics(bot3);
+
+        // when
+        botStatisticsJob.runDailyBotStatistics();
+
+        // then
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot1);
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot2);
+        verify(statisticsProcessor, times(1)).processBotStatistics(bot3);
     }
 }

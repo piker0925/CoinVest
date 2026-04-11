@@ -8,11 +8,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 봇의 일일 자산 성과 스냅샷.
- * 다기간(1M, 3M, ALL) 통계 계산의 원본 데이터로 사용됨.
  */
 @Entity
 @Table(name = "bot_performances", uniqueConstraints = {
@@ -31,7 +30,7 @@ public class BotPerformance extends BaseEntity {
     private TradingBot bot;
 
     @Column(name = "snapshot_date", nullable = false)
-    private LocalDate snapshotDate;
+    private LocalDateTime snapshotDate; // LocalDate -> LocalDateTime (V1 Baselining 통일)
 
     @Column(name = "total_asset_value", nullable = false, precision = 38, scale = 20)
     private BigDecimal totalAssetValue;
@@ -43,7 +42,7 @@ public class BotPerformance extends BaseEntity {
     private BigDecimal netContribution;
 
     @Builder
-    private BotPerformance(TradingBot bot, LocalDate snapshotDate, BigDecimal totalAssetValue,
+    private BotPerformance(TradingBot bot, LocalDateTime snapshotDate, BigDecimal totalAssetValue,
                            BigDecimal dailyReturnRate, BigDecimal netContribution) {
         this.bot = bot;
         this.snapshotDate = snapshotDate;
