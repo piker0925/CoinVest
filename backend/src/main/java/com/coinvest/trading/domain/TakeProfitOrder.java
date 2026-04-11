@@ -27,10 +27,10 @@ public class TakeProfitOrder extends BaseEntity {
     @JoinColumn(name = "position_id", nullable = false)
     private Position position;
 
-    @Column(nullable = false, precision = 20, scale = 4)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal triggerPrice;
 
-    @Column(nullable = false, precision = 30, scale = 18)
+    @Column(nullable = false, precision = 38, scale = 20)
     private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)

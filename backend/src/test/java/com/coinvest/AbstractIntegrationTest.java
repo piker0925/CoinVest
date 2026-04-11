@@ -5,25 +5,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.TimeZone;
 
 /**
  * 통합 테스트 공통 기반 클래스.
- * 1. 수동 싱글톤 패턴으로 도커 생명주기 관리.
- * 2. @DirtiesContext를 통해 테스트 클래스 간 컨텍스트 간섭 원천 차단 (Spring Boot 3.4 대응).
- * 3. 템플릿 패턴을 이용한 정석적인 데이터 격리 및 예외 처리.
+ * 1. 수동 싱글톤 패턴: 컨테이너 기동 및 생명주기를 완벽히 제어.
+ * 2. 명시적 주입: @DynamicPropertySource를 사용하여 연결 정보 유실 차단.
+ * 3. 안정성 보강: Redis Readiness 체크 (WaitingFor) 추가.
  */
 @SpringBootTest
 @ActiveProfiles("test")
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class AbstractIntegrationTest {
 
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -32,7 +31,8 @@ public abstract class AbstractIntegrationTest {
             .withPassword("test");
 
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .waitingFor(Wait.forListeningPort()); // 🚀 CI 안정성을 위한 Readiness 체크 추가
 
     static {
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
@@ -48,6 +48,7 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        
         registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
         registry.add("spring.flyway.user", POSTGRES::getUsername);
         registry.add("spring.flyway.password", POSTGRES::getPassword);
@@ -60,14 +61,12 @@ public abstract class AbstractIntegrationTest {
     void clearRedis() {
         if (redisTemplate != null) {
             try {
-                // [정석] execute() 콜백을 사용하여 커넥션 누수를 방지하고 데이터를 초기화
                 redisTemplate.execute((RedisConnection connection) -> {
                     connection.serverCommands().flushAll();
                     return null;
                 });
             } catch (Exception e) {
-                // 회피 금지: 데이터 오염 방지를 위해 실패 시 즉시 중단 및 상세 보고
-                String msg = "🚨 Redis Flush Failed! Critical for test isolation. Reason: " + e.getMessage();
+                String msg = "🚨 Redis Flush Failed! Reason: " + e.getMessage();
                 System.err.println(msg);
                 throw new RuntimeException(msg, e);
             }

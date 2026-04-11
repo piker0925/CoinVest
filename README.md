@@ -35,13 +35,13 @@
 
 ## 🛠️ Tech Stack (기술 스택)
 
-| 분류            | 기술 스택                                                                                                                                                                                 | 도입 이유 및 역할                                          |
-|:--------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------|
-| **Backend**   | ![Java 21](https://img.shields.io/badge/Java-21-orange) ![Spring Boot 3.4](https://img.shields.io/badge/Spring_Boot-3.4-green)                                                        | 가상 스레드(Virtual Thread) 기반의 고효율 I/O 및 도메인 중심 아키텍처    |
-| **Frontend**  | ![React 18](https://img.shields.io/badge/React-18-blue) ![Vite](https://img.shields.io/badge/Vite-latest-purple) ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-latest-blue) | Web-First 반응형 UI, Recharts 기반 벤치마크 차트               |
-| **Messaging** | Redis Pub/Sub + Spring ApplicationEvent                                                                                                                                               | 가격 이벤트 전파 및 도메인 이벤트 처리. 단일 인스턴스에서 Kafka는 과잉(4GB 절약) |
-| **Database**  | ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-blue) ![Redis 7](https://img.shields.io/badge/Redis-7-red)                                                                | 정합성 보장을 위한 비관적 락 및 고속 캐시/이벤트 채널                     |
-| **Infra**     | ![Docker](https://img.shields.io/badge/Docker-latest-blue) ![Nginx](https://img.shields.io/badge/Nginx-latest-green) ![Oracle Cloud](https://img.shields.io/badge/OCI_ARM-24GB_RAM-red) | Nginx Reverse Proxy 기반 단일 인스턴스 최적화 및 CI/CD 자동화 |
+| 분류            | 기술 스택                                                                                                                                                                                   | 도입 이유 및 역할                                          |
+|:--------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------|
+| **Backend**   | ![Java 21](https://img.shields.io/badge/Java-21-orange) ![Spring Boot 3.4](https://img.shields.io/badge/Spring_Boot-3.4-green)                                                          | 가상 스레드(Virtual Thread) 기반의 고효율 I/O 및 도메인 중심 아키텍처    |
+| **Frontend**  | ![React 18](https://img.shields.io/badge/React-18-blue) ![Vite](https://img.shields.io/badge/Vite-latest-purple) ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-latest-blue)   | Web-First 반응형 UI, Recharts 기반 벤치마크 차트               |
+| **Messaging** | Redis Pub/Sub + Spring ApplicationEvent                                                                                                                                                 | 가격 이벤트 전파 및 도메인 이벤트 처리. 단일 인스턴스에서 Kafka는 과잉(4GB 절약) |
+| **Database**  | ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-blue) ![Redis 7](https://img.shields.io/badge/Redis-7-red)                                                                  | 정합성 보장을 위한 비관적 락 및 고속 캐시/이벤트 채널                     |
+| **Infra**     | ![Docker](https://img.shields.io/badge/Docker-latest-blue) ![Nginx](https://img.shields.io/badge/Nginx-latest-green) ![Oracle Cloud](https://img.shields.io/badge/OCI_ARM-24GB_RAM-red) | Nginx Reverse Proxy 기반 단일 인스턴스 최적화 및 CI/CD 자동화      |
 
 ---
 
@@ -101,6 +101,10 @@ backend/src/main/java/com/coinvest/
 
 - **동시성 통합 테스트**: Multi-threading 환경에서 비관적 락과 데드락 방지 로직의 정합성을 검증합니다.
 - **Testcontainers 활용**: 실제 인프라(DB, Redis) 환경과 동일한 조건에서 수행되는 통합 테스트를 통해 높은 신뢰성을 보장합니다.
+- **테스트 가이드 (중요)**:
+    * **통합 테스트**: DB/Redis 연결이 필요한 테스트는 반드시 `AbstractIntegrationTest` 클래스를 상속받아야 합니다. (`test` 프로필 자동 활성화)
+    * **단위 테스트**: 인프라 의존성 없이 Mockito만 사용하여 수행하며, 별도의 프로필을 지정하지 않습니다.
+    * **주의**: `test` 프로필은 Testcontainers 전용이며, 개별 테스트 클래스에서 `datasource.url`을 하드코딩하는 것을 금지합니다.
 - **CSV 리플레이 스트레스 테스트**: 극단적 시장 상황을 재현하여 매칭 엔진·정산 로직의 한계를 검증합니다.
 
 ---
@@ -124,14 +128,14 @@ cd frontend && npm install && npm run dev
 
 본 프로젝트는 Oracle Cloud ARM 환경에 최적화된 CI/CD 파이프라인을 내장하고 있습니다.
 
-1.  **GitHub Secrets 설정**:
+1. **GitHub Secrets 설정**:
     - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`: 도커 허브 계정 정보.
     - `OCI_HOST`, `OCI_USERNAME`, `OCI_SSH_KEY`: 오라클 서버 접속 정보.
     - `APP_ENV_FILE`: `.env` 파일 내용 전체.
     - `DOCKER_COMPOSE_CONTENT`: 프로젝트의 `docker-compose.yml` 내용.
     - `NGINX_CONF_CONTENT`: `nginx/default.conf` 내용.
-2.  `main` 브랜치 푸시 시 자동으로 **x86 빌드 -> ARM64 패키징 -> 서버 배포**가 진행됩니다.
-3.  **초경량 모니터링**: 배포 후 관리자 계정으로 `/api/v1/dashboard/admin/metrics`에서 실시간 시스템 상태를 확인할 수 있습니다.
+2. `main` 브랜치 푸시 시 자동으로 **x86 빌드 -> ARM64 패키징 -> 서버 배포**가 진행됩니다.
+3. **초경량 모니터링**: 배포 후 관리자 계정으로 `/api/v1/dashboard/admin/metrics`에서 실시간 시스템 상태를 확인할 수 있습니다.
 
 ### Live 모드 (실제 API 연동 — 자체 배포)
 

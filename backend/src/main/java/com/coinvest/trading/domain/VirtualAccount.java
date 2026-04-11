@@ -1,10 +1,7 @@
 package com.coinvest.trading.domain;
 
 import com.coinvest.auth.domain.User;
-import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
-import com.coinvest.global.exception.ErrorCode;
-import com.coinvest.global.exception.ResourceNotFoundException;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -14,7 +11,6 @@ import java.util.List;
 
 /**
  * 가상 계좌 엔티티.
- * 사용자의 가상 자금을 관리함. (Currency별 Balance 통합 관리)
  */
 @Entity
 @Table(name = "virtual_accounts")
@@ -28,32 +24,37 @@ public class VirtualAccount extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    private User user;
+
+    @Column(name = "account_number", nullable = false, unique = true, length = 50)
+    private String accountNumber;
+
+    /**
+     * 총 순 입금액 (원금). ROI 계산의 기준이 됨.
+     */
+    @Column(name = "total_net_contribution", nullable = false, precision = 38, scale = 20)
+    @Builder.Default
+    private BigDecimal totalNetContribution = BigDecimal.ZERO;
+
     @Version
     @Column(nullable = false)
     private Long version;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
-    private User user;
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private boolean isActive = true;
 
     @OneToMany(mappedBy = "account", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<Balance> balances = new ArrayList<>();
 
-    /**
-     * 특정 통화의 잔고 조회.
-     */
-    public Balance getBalance(Currency currency) {
-        return balances.stream()
-                .filter(b -> b.getCurrency() == currency)
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TRADING_BALANCE_NOT_FOUND));
+    public void updateContribution(BigDecimal amount) {
+        this.totalNetContribution = this.totalNetContribution.add(amount);
     }
 
-    /**
-     * 특정 통화의 가용 매수 여력(Buying Power) 조회.
-     */
-    public BigDecimal getAvailableForPurchase(Currency currency) {
-        return getBalance(currency).getAvailableForPurchase();
+    public void deactivate() {
+        this.isActive = false;
     }
 }

@@ -58,10 +58,10 @@ public class Order extends BaseEntity {
     @Column(name = "order_type", nullable = false)
     private OrderType type;
 
-    @Column(precision = 38, scale = 20)
+    @Column(precision = 38, scale = 20) // 스키마와 일치하도록 수정
     private BigDecimal price;
 
-    @Column(nullable = false, precision = 38, scale = 20)
+    @Column(nullable = false, precision = 38, scale = 20) // 스키마와 일치하도록 수정
     private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)

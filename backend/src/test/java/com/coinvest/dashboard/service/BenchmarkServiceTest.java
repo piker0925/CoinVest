@@ -6,7 +6,7 @@ import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioSnapshot;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.repository.PortfolioRepository;
-import com.coinvest.portfolio.repository.PortfolioSnapshotRepository;
+import com.coinvest.portfolio.service.PortfolioSnapshotService;
 import com.coinvest.portfolio.service.PortfolioValuationService;
 import com.coinvest.dashboard.dto.PerformanceResponse;
 import com.coinvest.dashboard.dto.Period;
@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -38,10 +39,10 @@ class BenchmarkServiceTest {
     private PortfolioRepository portfolioRepository;
 
     @Mock
-    private PortfolioSnapshotRepository snapshotRepository;
+    private PortfolioValuationService valuationService;
 
     @Mock
-    private PortfolioValuationService valuationService;
+    private PortfolioSnapshotService snapshotService; // 🚀 기존에 누락되었던 핵심 Mock
 
     @Mock
     private BotPerformanceProvider botPerformanceProvider;
@@ -57,7 +58,6 @@ class BenchmarkServiceTest {
             .email("test@example.com")
             .role(UserRole.USER)
             .build();
-        // ID 강제 주입 (Reflection)
         ReflectionTestUtils.setField(testUser, "id", userId);
 
         testPortfolio = Portfolio.builder()
@@ -76,20 +76,20 @@ class BenchmarkServiceTest {
         PortfolioValuation valuation = PortfolioValuation.builder()
             .totalEvaluationBase(new BigDecimal("1200000"))
             .buyingPowerBase(new BigDecimal("50000"))
-            .netContribution(new BigDecimal("1100000")) // ncNow
+            .netContribution(new BigDecimal("1100000"))
             .build();
 
         given(portfolioRepository.findById(portfolioId)).willReturn(Optional.of(testPortfolio));
         given(valuationService.evaluate(portfolioId)).willReturn(valuation);
 
-        // 한 달 전 스냅샷 (V_start)
         PortfolioSnapshot startSnapshot = PortfolioSnapshot.builder()
-            .totalEvaluationBase(new BigDecimal("1000000"))  // vStart
-            .netContribution(new BigDecimal("1000000")) // ncStart
+            .totalEvaluationBase(new BigDecimal("1000000"))
+            .netContribution(new BigDecimal("1000000"))
             .build();
 
-        given(snapshotRepository.findClosestBefore(eq(portfolioId), any(LocalDateTime.class), any()))
-            .willReturn(java.util.List.of(startSnapshot));
+        // 🚀 snapshotService를 Mocking하여 NPE 해결
+        given(snapshotService.getClosestSnapshotBefore(eq(portfolioId), any(LocalDate.class)))
+            .willReturn(Optional.of(startSnapshot));
 
         // when
         PerformanceResponse response = benchmarkService.getMyPerformance(portfolioId, userId, period);

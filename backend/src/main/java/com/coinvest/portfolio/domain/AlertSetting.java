@@ -7,7 +7,7 @@ import lombok.*;
 import java.math.BigDecimal;
 
 /**
- * 포트폴리오별 알림 설정 엔티티.
+ * 알림 설정 엔티티.
  */
 @Entity
 @Table(name = "alert_settings")
@@ -22,26 +22,25 @@ public class AlertSetting extends BaseEntity {
     private Long id;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "portfolio_id", nullable = false)
+    @JoinColumn(name = "portfolio_id", nullable = false, unique = true)
     private Portfolio portfolio;
 
-    @Convert(converter = WebhookUrlConverter.class)
-    @Column(name = "discord_webhook_url")
+    @Column(name = "discord_webhook_url", columnDefinition = "TEXT")
     private String discordWebhookUrl;
 
     /**
-     * 편차 임계치 (예: 0.0500 = 5%).
+     * 리밸런싱 알림 임계치 (비중 편차).
      */
+    @Column(name = "deviation_threshold", nullable = false, precision = 38, scale = 20)
     @Builder.Default
-    @Column(name = "deviation_threshold", nullable = false, precision = 20, scale = 4)
-    private BigDecimal deviationThreshold = new BigDecimal("0.0500");
+    private BigDecimal deviationThreshold = new BigDecimal("0.05");
 
-    @Builder.Default
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private boolean isActive = true;
 
     /**
-     * 알림 설정 업데이트.
+     * 기존 시그니처 유지 (하위 호환성).
      */
     public void update(String discordWebhookUrl, BigDecimal deviationThreshold) {
         this.discordWebhookUrl = discordWebhookUrl;
@@ -49,16 +48,10 @@ public class AlertSetting extends BaseEntity {
     }
 
     /**
-     * 웹훅 장애 시 비활성화.
+     * 상태 변경을 포함한 업데이트 (오버로드).
      */
-    public void deactivate() {
-        this.isActive = false;
-    }
-
-    /**
-     * 사용자가 수동으로 활성화.
-     */
-    public void activate() {
-        this.isActive = true;
+    public void update(String discordWebhookUrl, BigDecimal deviationThreshold, boolean isActive) {
+        update(discordWebhookUrl, deviationThreshold);
+        this.isActive = isActive;
     }
 }
