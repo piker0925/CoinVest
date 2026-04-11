@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/coinvest
+    username: coinvest
+    password: your_secure_password
+    driver-class-name: org.postgresql.Driver
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    defer-datasource-initialization: true
+
+  flyway:
+    enabled: true
+    clean-on-validation-error: true
+
+# 테스트 환경에서는 실제 외부 API 호출 차단 (Mocking 권장)
+kis:
+  api:
+    base-url: http://localhost:9999
+    app-key: dummy
+    app-secret: dummy
+
+jwt:
+  secret: dummy_secret_key_for_test_purposes_only_at_least_64_chars_long_!!_1234567890
