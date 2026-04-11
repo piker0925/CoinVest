@@ -1,6 +1,7 @@
 package com.coinvest.trading.domain;
 
 import com.coinvest.auth.domain.User;
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -56,5 +57,23 @@ public class VirtualAccount extends BaseEntity {
 
     public void deactivate() {
         this.isActive = false;
+    }
+
+    /**
+     * 특정 통화의 잔고를 조회하는 편의 메서드.
+     */
+    public Balance getBalance(Currency currency) {
+        return balances.stream()
+                .filter(b -> b.getCurrency() == currency)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 특정 통화의 구매 가능 총액(가용 + 정산예정)을 조회하는 편의 메서드.
+     */
+    public BigDecimal getAvailableForPurchase(Currency currency) {
+        Balance balance = getBalance(currency);
+        return balance != null ? balance.getAvailableForPurchase() : BigDecimal.ZERO;
     }
 }

@@ -54,4 +54,18 @@ public class AlertSetting extends BaseEntity {
         update(discordWebhookUrl, deviationThreshold);
         this.isActive = isActive;
     }
+
+    /**
+     * 알림 활성화.
+     */
+    public void activate() {
+        this.isActive = true;
+    }
+
+    /**
+     * 알림 비활성화.
+     */
+    public void deactivate() {
+        this.isActive = false;
+    }
 }
