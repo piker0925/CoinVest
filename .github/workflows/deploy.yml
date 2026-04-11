@@ -11,7 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-        # 1. Backend Build & Test
+      # 1. Backend Build & Test
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -33,7 +33,7 @@ jobs:
         if: success()
         run: cd backend && ./gradlew bootJar -x test
 
-        # 2. Docker Setup & Login
+      # 2. Docker Setup & Login
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -43,7 +43,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-        # 3. Build & Push Images (ARM64)
+      # 3. Build & Push Images (ARM64)
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
@@ -61,6 +61,20 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-frontend:latest
+
+      # 🚀 빌드 단계 실패 알림 추가
+      - name: Discord Notification (Build Failure)
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "❌ CoinVest 빌드/테스트 실패"
+          description: |
+            **단계**: `Build & Push`
+            **사유**: 코드 컴파일 또는 단위 테스트 실패
+            **커밋**: `${{ github.event.head_commit.message }}`
+          color: 0xff0000
 
   deploy:
     needs: build-and-push
@@ -88,17 +102,28 @@ jobs:
             docker-compose up -d
             docker image prune -af
 
-        # 4. Discord Notification (Deploy Result)
-      - name: Discord Notification
-        if: always() # 성공/실패 상관없이 항상 실행
+      # 4. Discord Notification (Deploy Result)
+      - name: Discord Notification (Success)
+        if: success()
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: ${{ job.status }}
-          title: "🚀 CoinVest 배포 결과 리포트"
+          status: success
+          title: "🚀 CoinVest 배포 성공 ✅"
           description: |
-            **상태**: `${{ job.status == 'success' && '배포 성공 ✅' || '배포 실패 ❌' }}`
+            **상태**: 운영 서버 반영 완료
             **커밋**: `${{ github.event.head_commit.message }}`
-            **브랜치**: `${{ github.ref_name }}`
-            **작성자**: `${{ github.actor }}`
-          color: ${{ job.status == 'success' && '0x00ff00' || '0xff0000' }}
+            **URL**: `http://${{ secrets.OCI_HOST }}`
+          color: 0x00ff00
+
+      - name: Discord Notification (Deploy Failure)
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "❌ CoinVest 배포 실패"
+          description: |
+            **단계**: `Deployment`
+            **사유**: SSH 접속 실패 또는 컨테이너 기동 오류
+          color: 0xff0000
