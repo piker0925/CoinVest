@@ -1,78 +1,104 @@
-name: CoinVest CI/CD
+name: CoinVest CI/CD (Quality Guard & Discord Alert)
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'gradle'
+        # 1. Backend Build & Test
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x backend/gradlew
+      - name: Run Backend Tests
+        run: |
+          chmod +x backend/gradlew
+          cd backend && ./gradlew test
+        env:
+          JWT_SECRET: dummy_secret_key_for_ci_test_at_least_64_chars_long_!!_1234567890
+          APP_SECURITY_AES_KEY: dummy_32_byte_aes_key_for_ci_test_!!
+          KIS_APP_KEY: dummy_key
+          KIS_APP_SECRET: dummy_secret
 
-    - name: Build with Gradle (Fast build - No emulation)
-      run: cd backend && ./gradlew bootJar -x test
+      - name: Build Backend JAR
+        if: success()
+        run: cd backend && ./gradlew bootJar -x test
 
-    - name: Set up Docker Buildx (For ARM64 build)
-      uses: docker/setup-buildx-action@v3
+        # 2. Docker Setup & Login
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build and push ARM64 Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: backend/Dockerfile
-        platforms: linux/arm64
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-app:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # 3. Build & Push Images (ARM64)
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-app:latest
 
-    - name: Deploy to Oracle Cloud via SSH
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.OCI_HOST }}
-        username: ${{ secrets.OCI_USERNAME }}
-        key: ${{ secrets.OCI_SSH_KEY }}
-        script: |
-          mkdir -p ~/coinvest/nginx
-          cd ~/coinvest
-          
-          # .env 파일 생성 (싱글 쿼트 적용으로 특수문자 이스케이프 방지)
-          cat <<'EOF' > .env
-          ${{ secrets.APP_ENV_FILE }}
-          EOF
-          
-          # docker-compose.yml 동기화 (cat 방식으로 덮어쓰기)
-          cat <<'EOF' > docker-compose.yml
-          ${{ secrets.DOCKER_COMPOSE_CONTENT }}
-          EOF
-          
-          # nginx/default.conf 동기화
-          cat <<'EOF' > nginx/default.conf
-          ${{ secrets.NGINX_CONF_CONTENT }}
-          EOF
-          
-          # 최신 이미지 풀 및 재시작
-          docker-compose pull
-          docker-compose up -d
-          
-          # 미사용 이미지 정리 (디스크 부족 방지)
-          docker image prune -f
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-frontend:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Oracle Cloud via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USERNAME }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            mkdir -p ~/coinvest/nginx
+            cd ~/coinvest
+            cat <<'EOF' > .env
+            ${{ secrets.APP_ENV_FILE }}
+            EOF
+            cat <<'EOF' > docker-compose.yml
+            ${{ secrets.DOCKER_COMPOSE_CONTENT }}
+            EOF
+            cat <<'EOF' > nginx/default.conf
+            ${{ secrets.NGINX_CONF_CONTENT }}
+            EOF
+            docker-compose pull
+            docker-compose up -d
+            docker image prune -af
+
+        # 4. Discord Notification (Deploy Result)
+      - name: Discord Notification
+        if: always() # 성공/실패 상관없이 항상 실행
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🚀 CoinVest 배포 결과 리포트"
+          description: |
+            **상태**: `${{ job.status == 'success' && '배포 성공 ✅' || '배포 실패 ❌' }}`
+            **커밋**: `${{ github.event.head_commit.message }}`
+            **브랜치**: `${{ github.ref_name }}`
+            **작성자**: `${{ github.actor }}`
+          color: ${{ job.status == 'success' && '0x00ff00' || '0xff0000' }}
