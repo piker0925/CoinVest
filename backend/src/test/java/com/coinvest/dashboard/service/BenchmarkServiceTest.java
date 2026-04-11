@@ -2,6 +2,7 @@ package com.coinvest.dashboard.service;
 
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRole;
+import com.coinvest.fx.domain.Currency; // 🚀 누락된 임포트 추가
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioSnapshot;
 import com.coinvest.portfolio.dto.PortfolioValuation;

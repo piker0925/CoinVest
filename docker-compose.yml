@@ -51,6 +51,9 @@ services:
       - .env
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=${DB_URL}
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
       - JAVA_OPTS=-Xmx256m -Xms256m
       - TZ=Asia/Seoul
     depends_on:
