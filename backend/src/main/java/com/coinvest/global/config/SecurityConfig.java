@@ -45,6 +45,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/reissue").permitAll()
+                .requestMatchers("/error", "/favicon.ico").permitAll() // 에러 페이지 및 정적 리소스 허용
                 .anyRequest().authenticated()
             )
             .exceptionHandling(handler -> handler

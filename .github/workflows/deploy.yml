@@ -86,8 +86,11 @@ jobs:
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
+            set -e
             mkdir -p ~/coinvest/nginx
             cd ~/coinvest
+            
+            # 환경 설정 동기화
             cat <<'EOF' > .env
             ${{ secrets.APP_ENV_FILE }}
             EOF
@@ -97,8 +100,42 @@ jobs:
             cat <<'EOF' > nginx/default.conf
             ${{ secrets.NGINX_CONF_CONTENT }}
             EOF
+            
+            # 최신 이미지 풀 및 재시작
             docker-compose pull
             docker-compose up -d
+            
+            # 1. [인프라 안정성] Redis 준비 상태 확인 및 초기화
+            echo "Checking Redis health..."
+            for i in {1..20}; do
+              if docker-compose exec -T redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+                echo "Redis is ready!"
+                docker-compose exec -T redis redis-cli flushall
+                break
+              fi
+              sleep 1
+            done
+            
+            # 2. [서비스 무결성] 웹 서비스(Nginx/Frontend) 최종 응답 확인
+            echo "Waiting for Web Service to be ready..."
+            WEB_READY=0
+            for i in {1..30}; do
+              # HTTP 200~399 응답 확인
+              if curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "^[23]"; then
+                echo "✅ Web Service is UP and serving traffic!"
+                WEB_READY=1
+                break
+              fi
+              echo "Web Service is warming up... ($i/30)"
+              sleep 2
+            done
+            
+            if [ "$WEB_READY" = 0 ]; then
+              echo "🚨 CRITICAL: Web Service failed to start. Dumping logs for debugging:"
+              docker-compose logs --tail=50 backend
+              exit 1
+            fi
+            
             docker image prune -af
 
       # 4. Discord Notification (Deploy Result)
