@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -42,10 +43,13 @@ class BenchmarkServiceTest {
     private PortfolioValuationService valuationService;
 
     @Mock
-    private PortfolioSnapshotService snapshotService; // 🚀 기존에 누락되었던 핵심 Mock
+    private PortfolioSnapshotService snapshotService;
 
     @Mock
     private BotPerformanceProvider botPerformanceProvider;
+
+    @Mock
+    private RedisTemplate<String, Object> redisTemplate; // 🚀 NPE 해결을 위한 핵심 Mock 추가
 
     private User testUser;
     private Portfolio testPortfolio;
@@ -63,9 +67,11 @@ class BenchmarkServiceTest {
         testPortfolio = Portfolio.builder()
             .name("Test Portfolio")
             .user(testUser)
+            .baseCurrency(Currency.KRW) // 🚀 Currency 명시적 주입
             .netContribution(new BigDecimal("1000000"))
             .build();
         ReflectionTestUtils.setField(testPortfolio, "id", portfolioId);
+        ReflectionTestUtils.setField(testPortfolio, "createdAt", LocalDateTime.now());
     }
 
     @Test
@@ -74,9 +80,12 @@ class BenchmarkServiceTest {
         // given
         Period period = Period.ONE_MONTH;
         PortfolioValuation valuation = PortfolioValuation.builder()
+            .portfolioId(portfolioId)
             .totalEvaluationBase(new BigDecimal("1200000"))
             .buyingPowerBase(new BigDecimal("50000"))
             .netContribution(new BigDecimal("1100000"))
+            .baseCurrency(Currency.KRW) // 🚀 Currency 명시적 주입
+            .isStaleExchangeRate(false) // 🚀 필수 플래그 주입
             .build();
 
         given(portfolioRepository.findById(portfolioId)).willReturn(Optional.of(testPortfolio));
@@ -87,7 +96,6 @@ class BenchmarkServiceTest {
             .netContribution(new BigDecimal("1000000"))
             .build();
 
-        // 🚀 snapshotService를 Mocking하여 NPE 해결
         given(snapshotService.getClosestSnapshotBefore(eq(portfolioId), any(LocalDate.class)))
             .willReturn(Optional.of(startSnapshot));
 

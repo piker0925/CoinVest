@@ -7,14 +7,12 @@ spring:
       # Testcontainers 사용 시 실제 DB(Postgres)를 H2로 자동 교체하는 것을 방지
       replace: none
 
-  # [주의] datasource url/username/password는 비워둡니다.
-  # AbstractIntegrationTest의 @DynamicPropertySource가 런타임에 도커 컨테이너 정보를 주입합니다.
+  # AbstractIntegrationTest의 @DynamicPropertySource가 런타임에 도커 컨테이너 정보를 주입함
   datasource:
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      # 통합 스키마(V1)와 엔티티 간의 정합성을 엄격하게 검증
       ddl-auto: validate
     properties:
       hibernate:
@@ -22,7 +20,6 @@ spring:
 
   flyway:
     enabled: true
-    # V1__initial_schema.sql 부터의 실행을 보장
 
 kis:
   api:

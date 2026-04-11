@@ -77,7 +77,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coinvest} -d ${POSTGRES_DB:-coinvest}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coinvest} -d ${POSTGRES_DB:-coinvest}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -92,7 +92,14 @@ services:
       resources:
         limits:
           memory: 100M
-
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - coinvest-network
+    restart: always
 networks:
   coinvest-network:
     driver: bridge
