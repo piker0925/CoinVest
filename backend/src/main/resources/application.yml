@@ -8,7 +8,6 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    defer-datasource-initialization: true # Flyway 이후에 data.sql 실행 보장
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
