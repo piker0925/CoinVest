@@ -29,7 +29,6 @@ jobs:
           KIS_APP_KEY: dummy_key
           KIS_APP_SECRET: dummy_secret
 
-      # 테스트 실패 시에도 리포트 보관 (디버깅 용도)
       - name: Upload Test Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,7 +69,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/coinvest-frontend:latest
 
-      # 빌드 단계 실패 알림
+      # 빌드 실패 알림
       - name: Discord Notification (Build Failure)
         if: failure()
         uses: sarisia/actions-status-discord@v1
@@ -81,13 +80,24 @@ jobs:
           description: |
             **단계**: `Build & Push`
             **사유**: 코드 컴파일 또는 단위 테스트 실패 (리포트 확인 요망)
-            **커밋**: `${{ github.event.head_commit.message }}`
           color: 0xff0000
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code (for deploy config)
+        uses: actions/checkout@v4
+
+      - name: Copy Config files to OCI
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USERNAME }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: "docker-compose.yml,nginx/default.conf"
+          target: "~/coinvest"
+
       - name: Deploy to Oracle Cloud via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -96,31 +106,23 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
             set -e
-            mkdir -p ~/coinvest/nginx
             cd ~/coinvest
             
-            # 환경 설정 동기화
+            # .env 파일 생성 (Secrets에서 관리되는 운영용 환경변수)
             cat <<'EOF' > .env
             ${{ secrets.APP_ENV_FILE }}
-            EOF
-            cat <<'EOF' > docker-compose.yml
-            ${{ secrets.DOCKER_COMPOSE_CONTENT }}
-            EOF
-            cat <<'EOF' > nginx/default.conf
-            ${{ secrets.NGINX_CONF_CONTENT }}
             EOF
             
             # 최신 이미지 풀 및 재시작
             docker-compose pull
             docker-compose up -d
             
-            # 1. [인프라 안정성] Redis 준비 상태 확인 및 초기화
+            # 1. Redis 준비 확인
             echo "Checking Redis health..."
             SUCCESS=false
             for i in {1..20}; do
               if docker-compose exec -T redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
                 echo "Redis is ready!"
-                docker-compose exec -T redis redis-cli flushall
                 SUCCESS=true
                 break
               fi
@@ -128,7 +130,7 @@ jobs:
             done
             if [ "$SUCCESS" = false ]; then echo "Redis timeout"; exit 1; fi
             
-            # 2. [서비스 무결성] 웹 서비스(Nginx/Frontend) 최종 응답 확인
+            # 2. 웹 서비스 응답 확인
             echo "Waiting for Web Service to be ready..."
             WEB_READY=0
             for i in {1..30}; do
@@ -147,28 +149,16 @@ jobs:
             
             docker image prune -af
 
-      # 4. Discord Notification (Deploy Result)
-      - name: Discord Notification (Success)
-        if: success()
+      # 성공/실패 알림
+      - name: Discord Notification (Deploy Result)
+        if: always()
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: success
-          title: "🚀 CoinVest 배포 성공 ✅"
+          status: ${{ job.status }}
+          title: ${{ job.status == 'success' && '🚀 CoinVest 배포 성공 ✅' || '❌ CoinVest 배포 실패' }}
           description: |
-            **상태**: 운영 서버 반영 완료
+            **상태**: 운영 서버 배포 결과 (${{ job.status }})
             **커밋**: `${{ github.event.head_commit.message }}`
             **URL**: `http://${{ secrets.OCI_HOST }}`
-          color: 0x00ff00
-
-      - name: Discord Notification (Deploy Failure)
-        if: failure()
-        uses: sarisia/actions-status-discord@v1
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: failure
-          title: "❌ CoinVest 배포 실패"
-          description: |
-            **단계**: `Deployment`
-            **사유**: SSH 접속 실패 또는 컨테이너 기동 오류
-          color: 0xff0000
+          color: ${{ job.status == 'success' && '0x00ff00' || '0xff0000' }}
