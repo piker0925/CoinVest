@@ -6,7 +6,7 @@ import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.PortfolioAsset;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import com.coinvest.price.dto.TickerEvent;
 import lombok.RequiredArgsConstructor;

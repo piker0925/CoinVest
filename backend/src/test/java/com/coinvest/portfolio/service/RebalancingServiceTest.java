@@ -4,7 +4,7 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.portfolio.domain.Portfolio;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.dto.RebalancingProposal;
 import com.coinvest.trading.domain.Balance;

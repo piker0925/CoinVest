@@ -1,4 +1,6 @@
 spring:
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     driver-class-name: org.testcontainers.delegate.JdbcProxyDriver
     url: jdbc:tc:postgresql:16-alpine:///coinvest?TC_TMPFS=/testcontainers_tmpfs:rw

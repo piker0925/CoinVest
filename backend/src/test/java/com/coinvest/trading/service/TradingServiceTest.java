@@ -11,7 +11,7 @@ import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.dto.OrderCreateRequest;

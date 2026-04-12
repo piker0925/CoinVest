@@ -9,6 +9,7 @@ import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.*;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioCreateRequest;
 import com.coinvest.portfolio.dto.PortfolioResponse;
 import com.coinvest.portfolio.dto.PortfolioUpdateRequest;

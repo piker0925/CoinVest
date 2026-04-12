@@ -8,6 +8,7 @@ import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.dto.RebalancingProposal;
 import com.coinvest.portfolio.event.RebalanceAlertEvent;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.trading.domain.Balance;
 import com.coinvest.trading.domain.VirtualAccount;
 import com.coinvest.trading.repository.VirtualAccountRepository;

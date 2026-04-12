@@ -5,7 +5,7 @@ import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

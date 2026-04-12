@@ -10,7 +10,7 @@ import com.coinvest.fx.service.ExchangeRateService;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioAsset;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.price.service.PriceService;
 import com.coinvest.trading.domain.Balance;

@@ -1,10 +1,10 @@
 package com.coinvest.portfolio.service;
 
 import com.coinvest.portfolio.domain.*;
-import com.coinvest.portfolio.domain.*;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.repository.AlertHistoryRepository;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.trading.service.SseEmitters;
 import lombok.RequiredArgsConstructor;
 

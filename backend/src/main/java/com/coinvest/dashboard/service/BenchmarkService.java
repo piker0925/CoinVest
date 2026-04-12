@@ -12,7 +12,7 @@ import com.coinvest.global.common.RedisKeyConstants;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.portfolio.domain.Portfolio;
-import com.coinvest.portfolio.domain.PortfolioRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import com.coinvest.portfolio.domain.PortfolioSnapshot;
 import com.coinvest.portfolio.dto.PortfolioValuation;
 import com.coinvest.portfolio.service.PortfolioSnapshotService;

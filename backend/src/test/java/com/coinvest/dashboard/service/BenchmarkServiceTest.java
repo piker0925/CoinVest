@@ -35,7 +35,6 @@ import static org.mockito.BDDMockito.given;
 @ExtendWith(MockitoExtension.class)
 class BenchmarkServiceTest {
 
-    @InjectMocks
     private BenchmarkService benchmarkService;
 
     @Mock
@@ -60,6 +59,14 @@ class BenchmarkServiceTest {
 
     @BeforeEach
     void setUp() {
+        benchmarkService = new BenchmarkService(
+            portfolioRepository,
+            valuationService,
+            snapshotService,
+            botPerformanceProvider,
+            redisTemplate
+        );
+
         testUser = User.builder()
             .email("test@example.com")
             .role(UserRole.USER)
@@ -70,7 +77,7 @@ class BenchmarkServiceTest {
             .name("Test Portfolio")
             .user(testUser)
             .baseCurrency(Currency.KRW)
-            .netContribution(new BigDecimal("1000000"))
+            .netContribution(new BigDecimal("1100000"))
             .build();
         ReflectionTestUtils.setField(testPortfolio, "id", portfolioId);
         ReflectionTestUtils.setField(testPortfolio, "createdAt", LocalDateTime.now());
@@ -100,9 +107,6 @@ class BenchmarkServiceTest {
 
         given(snapshotService.getClosestSnapshotBefore(eq(portfolioId), any(LocalDate.class)))
             .willReturn(Optional.of(startSnapshot));
-
-        // 🚀 botPerformanceProvider가 null을 반환하지 않도록 설정 (NPE 방지)
-        given(botPerformanceProvider.getReturns(any(), any())).willReturn(Collections.emptyList());
 
         // when
         PerformanceResponse response = benchmarkService.getMyPerformance(portfolioId, userId, period);

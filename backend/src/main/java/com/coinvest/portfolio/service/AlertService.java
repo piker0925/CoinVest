@@ -10,6 +10,7 @@ import com.coinvest.portfolio.dto.AlertSettingResponse;
 import com.coinvest.portfolio.dto.AlertSettingUpdateRequest;
 import com.coinvest.portfolio.repository.AlertHistoryRepository;
 import com.coinvest.portfolio.repository.AlertSettingRepository;
+import com.coinvest.portfolio.repository.PortfolioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
