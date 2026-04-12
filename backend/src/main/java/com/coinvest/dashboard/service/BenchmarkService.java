@@ -75,9 +75,9 @@ public class BenchmarkService {
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
 
-        BigDecimal totalValueNow = valuation.getTotalEvaluationBase()
-            .add(valuation.getBuyingPowerBase());
-        BigDecimal ncNow = portfolio.getNetContribution();
+        BigDecimal totalValueNow = Optional.ofNullable(valuation.getTotalEvaluationBase()).orElse(BigDecimal.ZERO)
+            .add(Optional.ofNullable(valuation.getBuyingPowerBase()).orElse(BigDecimal.ZERO));
+        BigDecimal ncNow = Optional.ofNullable(portfolio.getNetContribution()).orElse(BigDecimal.ZERO);
 
         BigDecimal returnRate;
         if (period == Period.ALL) {
@@ -108,8 +108,8 @@ public class BenchmarkService {
                         .multiply(BigDecimal.valueOf(100));
             } else {
                 PortfolioSnapshot startSnapshot = startSnapshotOpt.get();
-                BigDecimal vStart = startSnapshot.getTotalEvaluationBase();
-                BigDecimal ncStart = startSnapshot.getNetContribution();
+                BigDecimal vStart = Optional.ofNullable(startSnapshot.getTotalEvaluationBase()).orElse(BigDecimal.ZERO);
+                BigDecimal ncStart = Optional.ofNullable(startSnapshot.getNetContribution()).orElse(BigDecimal.ZERO);
 
                 if (vStart.compareTo(BigDecimal.ZERO) == 0) {
                     returnRate = BigDecimal.ZERO;

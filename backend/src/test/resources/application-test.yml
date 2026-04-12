@@ -1,31 +1,27 @@
 spring:
-  main:
-    allow-bean-definition-overriding: true
-  
-  test:
-    database:
-      # Testcontainers 사용 시 실제 DB(Postgres)를 H2로 자동 교체하는 것을 방지
-      replace: none
-
-  # AbstractIntegrationTest의 @DynamicPropertySource가 런타임에 도커 컨테이너 정보를 주입함
   datasource:
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: org.testcontainers.delegate.JdbcProxyDriver
+    url: jdbc:tc:postgresql:16-alpine:///coinvest?TC_TMPFS=/testcontainers_tmpfs:rw
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: create-drop
+    show-sql: false
     properties:
       hibernate:
+        format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
-    enabled: true
+    enabled: false
 
-kis:
-  api:
-    base-url: http://localhost:9999
-    app-key: dummy
-    app-secret: dummy
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
-jwt:
-  secret: dummy_secret_key_for_test_purposes_only_at_least_64_chars_long_!!_1234567890
+logging:
+  level:
+    root: WARN
+    com.coinvest: DEBUG
+    org.hibernate.SQL: WARN

@@ -170,9 +170,6 @@ class TradingIntegrationTest extends AbstractIntegrationTest {
         BigDecimal totalKrw = account.getAvailableForPurchase(Currency.KRW);
         BigDecimal totalUsd = account.getAvailableForPurchase(Currency.USD);
 
-        System.out.println("Remaining KRW: " + totalKrw + ", Remaining USD: " + totalUsd);
-        System.out.println("Success: " + successCount.get() + ", Fail: " + failCount.get());
-
         // 잔고가 음수가 되지 않았는지 확인
         assertThat(totalKrw).isGreaterThanOrEqualTo(BigDecimal.ZERO);
         assertThat(totalUsd).isGreaterThanOrEqualTo(BigDecimal.ZERO);

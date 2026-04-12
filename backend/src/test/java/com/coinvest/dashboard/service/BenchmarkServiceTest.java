@@ -2,7 +2,7 @@ package com.coinvest.dashboard.service;
 
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRole;
-import com.coinvest.fx.domain.Currency; // 🚀 누락된 임포트 추가
+import com.coinvest.fx.domain.Currency;
 import com.coinvest.portfolio.domain.Portfolio;
 import com.coinvest.portfolio.domain.PortfolioSnapshot;
 import com.coinvest.portfolio.dto.PortfolioValuation;
@@ -24,6 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,7 +51,7 @@ class BenchmarkServiceTest {
     private BotPerformanceProvider botPerformanceProvider;
 
     @Mock
-    private RedisTemplate<String, Object> redisTemplate; // 🚀 NPE 해결을 위한 핵심 Mock 추가
+    private RedisTemplate<String, Object> redisTemplate;
 
     private User testUser;
     private Portfolio testPortfolio;
@@ -68,7 +69,7 @@ class BenchmarkServiceTest {
         testPortfolio = Portfolio.builder()
             .name("Test Portfolio")
             .user(testUser)
-            .baseCurrency(Currency.KRW) // 🚀 Currency 명시적 주입
+            .baseCurrency(Currency.KRW)
             .netContribution(new BigDecimal("1000000"))
             .build();
         ReflectionTestUtils.setField(testPortfolio, "id", portfolioId);
@@ -85,8 +86,8 @@ class BenchmarkServiceTest {
             .totalEvaluationBase(new BigDecimal("1200000"))
             .buyingPowerBase(new BigDecimal("50000"))
             .netContribution(new BigDecimal("1100000"))
-            .baseCurrency(Currency.KRW) // 🚀 Currency 명시적 주입
-            .isStaleExchangeRate(false) // 🚀 필수 플래그 주입
+            .baseCurrency(Currency.KRW)
+            .isStaleExchangeRate(false)
             .build();
 
         given(portfolioRepository.findById(portfolioId)).willReturn(Optional.of(testPortfolio));
@@ -99,6 +100,9 @@ class BenchmarkServiceTest {
 
         given(snapshotService.getClosestSnapshotBefore(eq(portfolioId), any(LocalDate.class)))
             .willReturn(Optional.of(startSnapshot));
+
+        // 🚀 botPerformanceProvider가 null을 반환하지 않도록 설정 (NPE 방지)
+        given(botPerformanceProvider.getReturns(any(), any())).willReturn(Collections.emptyList());
 
         // when
         PerformanceResponse response = benchmarkService.getMyPerformance(portfolioId, userId, period);
