@@ -141,6 +141,7 @@ CREATE TABLE portfolio_snapshots (
     net_contribution       NUMERIC(38, 20) NOT NULL,
     price_mode             VARCHAR(20)  NOT NULL DEFAULT 'DEMO',
     created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (portfolio_id, snapshot_date)
 );
 

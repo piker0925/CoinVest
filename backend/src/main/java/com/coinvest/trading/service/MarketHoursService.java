@@ -32,8 +32,8 @@ public class MarketHoursService {
      * 자산별 거래소 개장 여부 확인.
      */
     public boolean isMarketOpen(Asset asset) {
-        if (asset.getAssetClass() == AssetClass.CRYPTO) {
-            return true; // 코인은 24/7
+        if (asset.getAssetClass() == AssetClass.CRYPTO || asset.getAssetClass() == AssetClass.VIRTUAL) {
+            return true; // 코인 및 가상자산은 24/7
         }
 
         Exchange exchange = getExchangeFromAsset(asset);
@@ -64,8 +64,8 @@ public class MarketHoursService {
      * 정산 예정일(T+n) 계산.
      */
     public LocalDate calculateSettlementDate(Asset asset, LocalDate tradeDate) {
-        if (asset.getAssetClass() == AssetClass.CRYPTO) {
-            return tradeDate; // 코인은 T+0 (즉시 정산)
+        if (asset.getAssetClass() == AssetClass.CRYPTO || asset.getAssetClass() == AssetClass.VIRTUAL) {
+            return tradeDate; // 코인 및 가상자산은 T+0 (즉시 정산)
         }
 
         Exchange exchange = getExchangeFromAsset(asset);
@@ -102,7 +102,7 @@ public class MarketHoursService {
 
     private Exchange getExchangeFromAsset(Asset asset) {
         return switch (asset.getAssetClass()) {
-            case CRYPTO -> Exchange.UPBIT;
+            case CRYPTO, VIRTUAL -> Exchange.UPBIT;
             case KR_STOCK, KR_ETF -> Exchange.KRX;
             case US_STOCK, US_ETF -> Exchange.NYSE;
         };

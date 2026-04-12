@@ -5,5 +5,6 @@ public enum AssetClass {
     US_STOCK,
     KR_STOCK,
     US_ETF,
-    KR_ETF
+    KR_ETF,
+    VIRTUAL
 }
