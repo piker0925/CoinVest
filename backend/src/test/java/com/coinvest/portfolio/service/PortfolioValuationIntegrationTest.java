@@ -79,6 +79,7 @@ class PortfolioValuationIntegrationTest extends AbstractIntegrationTest {
         // 2. 가상 계좌 및 잔고 생성
         VirtualAccount account = VirtualAccount.builder()
                 .user(testUser)
+                .accountNumber("VAL-TEST-" + System.currentTimeMillis())
                 .balances(new ArrayList<>())
                 .build();
         virtualAccountRepository.save(account);

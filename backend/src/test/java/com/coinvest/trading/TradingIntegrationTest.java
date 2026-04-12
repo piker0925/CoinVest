@@ -60,6 +60,9 @@ class TradingIntegrationTest extends AbstractIntegrationTest {
     private final String krwUniversalCode = "CRYPTO:BTC";
     private final String usdUniversalCode = "US_STOCK:AAPL";
 
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
     @BeforeEach
     void setUp() {
         // 기존 데이터 초기화 (수동)
@@ -74,6 +77,7 @@ class TradingIntegrationTest extends AbstractIntegrationTest {
 
         VirtualAccount account = VirtualAccount.builder()
                 .user(testUser)
+                .accountNumber("TRD-TEST-" + System.currentTimeMillis())
                 .balances(new ArrayList<>())
                 .build();
         virtualAccountRepository.save(account);
@@ -166,15 +170,17 @@ class TradingIntegrationTest extends AbstractIntegrationTest {
         executorService.shutdown();
 
         // then
-        VirtualAccount account = virtualAccountRepository.findByUserId(testUser.getId()).orElseThrow();
-        BigDecimal totalKrw = account.getAvailableForPurchase(Currency.KRW);
-        BigDecimal totalUsd = account.getAvailableForPurchase(Currency.USD);
+        transactionTemplate.executeWithoutResult(status -> {
+            VirtualAccount account = virtualAccountRepository.findByUserId(testUser.getId()).orElseThrow();
+            BigDecimal totalKrw = account.getAvailableForPurchase(Currency.KRW);
+            BigDecimal totalUsd = account.getAvailableForPurchase(Currency.USD);
 
-        // 잔고가 음수가 되지 않았는지 확인
-        assertThat(totalKrw).isGreaterThanOrEqualTo(BigDecimal.ZERO);
-        assertThat(totalUsd).isGreaterThanOrEqualTo(BigDecimal.ZERO);
-        
-        // 데드락이 발생했다면 latch.await()에서 타임아웃이 났거나 success가 0일 것임
-        assertThat(successCount.get()).isGreaterThan(0);
+            // 잔고가 음수가 되지 않았는지 확인
+            assertThat(totalKrw).isGreaterThanOrEqualTo(BigDecimal.ZERO);
+            assertThat(totalUsd).isGreaterThanOrEqualTo(BigDecimal.ZERO);
+            
+            // 데드락이 발생했다면 latch.await()에서 타임아웃이 났거나 success가 0일 것임
+            assertThat(successCount.get()).isGreaterThan(0);
+        });
     }
 }
