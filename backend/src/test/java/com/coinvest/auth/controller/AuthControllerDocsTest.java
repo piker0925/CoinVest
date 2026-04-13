@@ -1,5 +1,6 @@
 package com.coinvest.auth.controller;
 
+import com.coinvest.auth.dto.AuthTokenResult;
 import com.coinvest.auth.dto.LoginRequest;
 import com.coinvest.auth.dto.TokenResponse;
 import com.coinvest.auth.service.AuthService;
@@ -50,7 +51,7 @@ class AuthControllerDocsTest extends RestDocsSupport {
     @DisplayName("로그인 API 문서화")
     void login() throws Exception {
         LoginRequest request = new LoginRequest("test@example.com", "password123");
-        TokenResponse response = TokenResponse.of("access-token", "refresh-token");
+        AuthTokenResult response = new AuthTokenResult("access-token", "refresh-token", "test@example.com", "ROLE_USER");
 
         given(authService.login(any())).willReturn(response);
 
@@ -67,7 +68,8 @@ class AuthControllerDocsTest extends RestDocsSupport {
                                 fieldWithPath("success").type(JsonFieldType.BOOLEAN).description("성공 여부"),
                                 fieldWithPath("message").type(JsonFieldType.STRING).description("응답 메시지").optional(),
                                 fieldWithPath("data.accessToken").type(JsonFieldType.STRING).description("액세스 토큰"),
-                                fieldWithPath("data.refreshToken").type(JsonFieldType.STRING).description("리프레시 토큰")
+                                fieldWithPath("data.email").type(JsonFieldType.STRING).description("사용자 이메일"),
+                                fieldWithPath("data.role").type(JsonFieldType.STRING).description("사용자 역할")
                         )
                 ));
     }

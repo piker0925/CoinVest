@@ -21,7 +21,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 
+import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.domain.AssetClass;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Optional;
 
@@ -56,6 +60,15 @@ class LimitOrderMatchingServiceTest {
 
     @Mock
     private TradeRepository tradeRepository;
+
+    @Mock
+    private com.coinvest.trading.repository.SettlementRepository settlementRepository;
+
+    @Mock
+    private com.coinvest.asset.repository.AssetRepository assetRepository;
+
+    @Mock
+    private MarketHoursService marketHoursService;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -111,9 +124,17 @@ class LimitOrderMatchingServiceTest {
         given(positionRepository.findByUserIdAndUniversalCodeAndPriceMode(anyLong(), anyString(), any(PriceMode.class)))
                 .willReturn(Optional.empty());
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
+        given(marketHoursService.calculateSettlementDate(any(Asset.class), any(LocalDate.class)))
+                .willReturn(LocalDate.now().plusDays(2));
 
         // when
-        matchingService.executeBuyOrderInTransaction(orderId, currentPrice);
+        Asset asset = Asset.builder()
+                .universalCode("CRYPTO:BTC")
+                .assetClass(AssetClass.CRYPTO)
+                .quoteCurrency(Currency.KRW)
+                .feeRate(new BigDecimal("0.0005"))
+                .build();
+        matchingService.executeBuyOrderInTransaction(orderId, currentPrice, LocalDate.now(), asset);
 
         // then
         assertThat(krwBalance.getAvailable().compareTo(new BigDecimal("10000000"))).isEqualTo(0);
@@ -155,7 +176,13 @@ class LimitOrderMatchingServiceTest {
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> inv.getArgument(0));
 
         // when
-        matchingService.executeSellOrderInTransaction(orderId, currentPrice);
+        Asset asset = Asset.builder()
+                .universalCode("CRYPTO:BTC")
+                .assetClass(AssetClass.CRYPTO)
+                .quoteCurrency(Currency.KRW)
+                .feeRate(new BigDecimal("0.0005"))
+                .build();
+        matchingService.executeSellOrderInTransaction(orderId, currentPrice, LocalDate.now(), asset);
 
         // then
         BigDecimal expectedReturn = new BigDecimal("9995000");

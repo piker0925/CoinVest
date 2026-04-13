@@ -33,6 +33,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -165,10 +166,18 @@ class TradingServiceTest {
             return BigDecimal.ONE; 
         });
 
-        given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
+        given(orderRepository.save(any(Order.class))).willAnswer(inv -> {
+            Order order = inv.getArgument(0);
+            ReflectionTestUtils.setField(order, "id", 100L);
+            ReflectionTestUtils.setField(order, "createdAt", LocalDateTime.now());
+            ReflectionTestUtils.setField(order, "updatedAt", LocalDateTime.now());
+            return order;
+        });
         given(tradeRepository.save(any(Trade.class))).willAnswer(inv -> {
             Trade trade = inv.getArgument(0);
             ReflectionTestUtils.setField(trade, "id", 1L);
+            ReflectionTestUtils.setField(trade, "createdAt", LocalDateTime.now());
+            ReflectionTestUtils.setField(trade, "updatedAt", LocalDateTime.now());
             return trade;
         });
 
