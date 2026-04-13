@@ -1,12 +1,18 @@
 package com.coinvest.auth.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
+import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import org.springframework.util.StringUtils;
 
 /**
  * 토큰 영속성 관리 서비스 (Redis 활용).
@@ -49,22 +55,31 @@ public class TokenService {
     }
 
     /**
-     * 특정 사용자의 모든 Refresh Token 삭제 (탈취 감지 시)
+     * 특정 사용자의 모든 Refresh Token 삭제 (탈취 감지 시).
+     * KEYS 대신 SCAN 커서를 사용하여 Redis 블로킹을 방지함.
      */
     public void deleteAllRefreshTokens(String email) {
-        Set<String> keys = redisTemplate.keys(REFRESH_TOKEN_PREFIX + email + "*");
-        if (keys != null && !keys.isEmpty()) {
+        String pattern = REFRESH_TOKEN_PREFIX + email + "*";
+        ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
+        List<String> keys = new ArrayList<>();
+
+        try (Cursor<String> cursor = redisTemplate.scan(options)) {
+            cursor.forEachRemaining(keys::add);
+        }
+
+        if (!keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
     }
 
     /**
-     * Access Token 블랙리스트 추가
+     * Access Token 블랙리스트 추가.
+     * 토큰 원문을 Redis 키로 사용하면 DEBUG 로그에 노출될 수 있으므로 MD5 해시를 키로 사용함.
      */
     public void addToBlacklist(String accessToken, long expirationTime) {
         if (expirationTime > 0) {
             redisTemplate.opsForValue().set(
-                    BLACKLIST_PREFIX + accessToken,
+                    BLACKLIST_PREFIX + hashToken(accessToken),
                     "logout",
                     expirationTime,
                     TimeUnit.MILLISECONDS
@@ -73,12 +88,21 @@ public class TokenService {
     }
 
     /**
-     * 블랙리스트 여부 확인
+     * 블랙리스트 여부 확인.
+     * addToBlacklist()와 동일한 해시 함수 사용.
      */
     public boolean isBlacklisted(String accessToken) {
         if (!StringUtils.hasText(accessToken)) {
             return false;
         }
-        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + accessToken));
+        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + hashToken(accessToken)));
+    }
+
+    /**
+     * 토큰 원문 노출 방지를 위해 Redis 키 생성 시 MD5 해시 적용.
+     * 보안 키가 아닌 식별자 목적이므로 MD5 충분.
+     */
+    private String hashToken(String token) {
+        return DigestUtils.md5DigestAsHex(token.getBytes(StandardCharsets.UTF_8));
     }
 }

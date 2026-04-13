@@ -1,4 +1,5 @@
 import {create} from 'zustand';
+import {authService} from '@/services/authService';
 
 export type UserRole = 'ROLE_USER' | 'ROLE_ADMIN';
 export type PriceMode = 'DEMO' | 'LIVE';
@@ -12,7 +13,7 @@ interface AuthState {
     user: UserProfile | null;
     mode: PriceMode;
     setAuth: (user: UserProfile) => void;
-    logout: () => void;
+    logout: () => Promise<void>;
     hydrateFromToken: () => void;
 }
 
@@ -40,11 +41,17 @@ export const useAuthStore = create<AuthState>((set) => ({
             mode: user.role === 'ROLE_ADMIN' ? 'LIVE' : 'DEMO',
         }),
 
-    logout: () => {
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem('token');
+    logout: async () => {
+        try {
+            await authService.logout();
+        } catch {
+            // logout API 실패(401, 네트워크 오류 등)해도 로컬 상태는 반드시 정리
+        } finally {
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('token');
+            }
+            set({user: null, mode: 'DEMO'});
         }
-        set({user: null, mode: 'DEMO'});
     },
 
     /**
@@ -64,6 +71,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         // 만료된 토큰은 제거 (silent reissue는 API 호출 시 인터셉터가 처리)
         if (payload.exp * 1000 < Date.now()) {
+            localStorage.removeItem('token');
+            return;
+        }
+
+        const VALID_ROLES = ['USER', 'ADMIN', 'BOT'] as const;
+        if (!VALID_ROLES.includes(payload.role as typeof VALID_ROLES[number])) {
             localStorage.removeItem('token');
             return;
         }

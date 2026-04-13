@@ -3,7 +3,6 @@
 import React from 'react';
 import {useRouter} from 'next/navigation';
 import {useAuthStore} from '@/store/useAuthStore';
-import {authService} from '@/services/authService';
 import {LogOut, ShieldAlert, ShieldCheck, User} from 'lucide-react';
 import Link from 'next/link';
 import {Button} from '@/components/ui/button';
@@ -13,9 +12,7 @@ export const Navbar = () => {
     const {user, mode, logout} = useAuthStore();
 
     const handleLogout = async () => {
-        await authService.logout().catch(() => {
-        });
-        logout();
+        await logout();
         router.push('/login');
     };
 

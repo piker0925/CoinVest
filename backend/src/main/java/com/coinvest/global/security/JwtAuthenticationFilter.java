@@ -37,7 +37,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             if (tokenService.isBlacklisted(token)) {
-                log.warn("Blacklisted token used: {}", token);
+                log.warn("Blacklisted token attempt from IP: {}", request.getRemoteAddr());
             } else {
                 Long userId = jwtTokenProvider.getUserId(token);
                 String role = jwtTokenProvider.getRole(token);

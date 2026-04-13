@@ -14,11 +14,6 @@ export const authService = {
     },
 
     async logout(): Promise<void> {
-        const token = localStorage.getItem('token');
-        if (token) {
-            await apiClient.post('/auth/logout', null, {
-                headers: {Authorization: `Bearer ${token}`},
-            });
-        }
+        await apiClient.post('/auth/logout');
     },
 };

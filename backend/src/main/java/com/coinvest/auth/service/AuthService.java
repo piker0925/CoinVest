@@ -94,7 +94,7 @@ public class AuthService {
     @Transactional
     public void logout(String accessToken) {
         if (!jwtTokenProvider.validateToken(accessToken)) {
-            return;
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
 
         String email = jwtTokenProvider.getEmail(accessToken);
