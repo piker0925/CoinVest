@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Set;
 
 @Slf4j
@@ -36,26 +38,30 @@ public class LimitOrderMatchingService {
     private final MarketHoursService marketHoursService;
 
     private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     /**
      * Ticker 수신 시 호출되어 조건에 맞는 지정가 주문을 찾아 체결을 시도함.
+     *
+     * @param tradeTimestamp 체결 이벤트 타임스탬프 (ms). null이면 시스템 현재 시각 사용.
+     *                       백테스트 재사용 시 과거 타임스탬프를 주입하면 정산일이 정확히 계산됨.
      */
-    public void matchOrders(String universalCode, BigDecimal currentPrice, PriceMode mode) {
-        matchBuyOrders(universalCode, currentPrice, mode);
-        matchSellOrders(universalCode, currentPrice, mode);
+    public void matchOrders(String universalCode, BigDecimal currentPrice, PriceMode mode, Long tradeTimestamp) {
+        LocalDate tradeDate = deriveTradeDate(tradeTimestamp);
+        matchBuyOrders(universalCode, currentPrice, mode, tradeDate);
+        matchSellOrders(universalCode, currentPrice, mode, tradeDate);
     }
 
-    private void matchBuyOrders(String universalCode, BigDecimal currentPrice, PriceMode mode) {
+    private void matchBuyOrders(String universalCode, BigDecimal currentPrice, PriceMode mode, LocalDate tradeDate) {
         String key = RedisKeyConstants.getLimitOrderKey(mode, "buy", universalCode);
-        // 매수: 현재가보다 높거나 같은 지정가 주문을 찾음
         Set<Object> matchingOrderIds = redisTemplate.opsForZSet().reverseRangeByScore(key, currentPrice.doubleValue(), Double.MAX_VALUE);
-        
+
         if (matchingOrderIds == null || matchingOrderIds.isEmpty()) return;
 
         for (Object orderIdObj : matchingOrderIds) {
             Long orderId = Long.valueOf(orderIdObj.toString());
             try {
-                boolean filled = executeBuyOrderInTransaction(orderId, currentPrice);
+                boolean filled = executeBuyOrderInTransaction(orderId, currentPrice, tradeDate);
                 if (filled) {
                     redisTemplate.opsForZSet().remove(key, orderIdObj);
                 }
@@ -65,17 +71,16 @@ public class LimitOrderMatchingService {
         }
     }
 
-    private void matchSellOrders(String universalCode, BigDecimal currentPrice, PriceMode mode) {
+    private void matchSellOrders(String universalCode, BigDecimal currentPrice, PriceMode mode, LocalDate tradeDate) {
         String key = RedisKeyConstants.getLimitOrderKey(mode, "sell", universalCode);
-        // 매도: 현재가보다 낮거나 같은 지정가 주문을 찾음
         Set<Object> matchingOrderIds = redisTemplate.opsForZSet().rangeByScore(key, 0, currentPrice.doubleValue());
-        
+
         if (matchingOrderIds == null || matchingOrderIds.isEmpty()) return;
 
         for (Object orderIdObj : matchingOrderIds) {
             Long orderId = Long.valueOf(orderIdObj.toString());
             try {
-                boolean filled = executeSellOrderInTransaction(orderId, currentPrice);
+                boolean filled = executeSellOrderInTransaction(orderId, currentPrice, tradeDate);
                 if (filled) {
                     redisTemplate.opsForZSet().remove(key, orderIdObj);
                 }
@@ -87,9 +92,11 @@ public class LimitOrderMatchingService {
 
     /**
      * 개별 매수 주문 체결 트랜잭션 (Short Transaction)
+     *
+     * @param tradeDate 체결 기준일 (KST). 정산일 계산의 기준이 됨.
      */
     @Transactional
-    public boolean executeBuyOrderInTransaction(Long orderId, BigDecimal currentPrice) {
+    public boolean executeBuyOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate) {
         int updated = orderRepository.updateStatusToFilledIfPending(orderId);
         if (updated == 0) {
             return true; // Self-healing
@@ -133,7 +140,7 @@ public class LimitOrderMatchingService {
 
         Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode())
                 .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
-        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, LocalDate.now());
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, tradeDate);
 
         Trade trade = Trade.builder()
                 .order(order)
@@ -166,9 +173,11 @@ public class LimitOrderMatchingService {
 
     /**
      * 개별 매도 주문 체결 트랜잭션 (Short Transaction)
+     *
+     * @param tradeDate 체결 기준일 (KST). 정산일 계산의 기준이 됨.
      */
     @Transactional
-    public boolean executeSellOrderInTransaction(Long orderId, BigDecimal currentPrice) {
+    public boolean executeSellOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate) {
         int updated = orderRepository.updateStatusToFilledIfPending(orderId);
         if (updated == 0) {
             return true; // Self-healing
@@ -197,7 +206,7 @@ public class LimitOrderMatchingService {
 
         Asset sellAsset = assetRepository.findByUniversalCode(order.getUniversalCode())
                 .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
-        LocalDate settlementDate = marketHoursService.calculateSettlementDate(sellAsset, LocalDate.now());
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(sellAsset, tradeDate);
 
         Trade trade = Trade.builder()
                 .order(order)
@@ -226,5 +235,15 @@ public class LimitOrderMatchingService {
         ));
 
         return true;
+    }
+
+    /**
+     * 타임스탬프(ms)로부터 KST 기준 체결일을 파생.
+     * null이면 시스템 현재 시각을 사용.
+     * KST 기준을 사용하는 이유: 자정 경계(23:59 KST)에서 UTC 기준 날짜와 달라지는 것을 방지.
+     */
+    private LocalDate deriveTradeDate(Long tradeTimestampMs) {
+        long epochMs = tradeTimestampMs != null ? tradeTimestampMs : System.currentTimeMillis();
+        return Instant.ofEpochMilli(epochMs).atZone(KST).toLocalDate();
     }
 }

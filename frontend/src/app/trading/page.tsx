@@ -140,7 +140,7 @@ export default function TradingPage() {
                         </div>
                     </div>
                     <div className="flex-1 bg-slate-950/20">
-                        <CandleChart universalCode={activeSymbol} mode={mode}/>
+                        <CandleChart universalCode={activeSymbol} mode={mode} tickerPrice={tickerPrice}/>
                     </div>
                 </div>
 

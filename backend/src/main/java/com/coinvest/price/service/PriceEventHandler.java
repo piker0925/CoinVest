@@ -90,7 +90,7 @@ public class PriceEventHandler implements MessageListener {
 
             // 3. 지정가 주문 매칭 시도
             try {
-                limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice(), mode);
+                limitOrderMatchingService.matchOrders(universalCode, event.getTradePrice(), mode, event.getTradeTimestamp());
             } catch (Exception e) {
                 log.error("Failed to match limit orders for asset: {} (mode: {})", universalCode, mode, e);
             }
