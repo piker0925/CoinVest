@@ -14,7 +14,7 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -55,10 +55,11 @@ public class SimulatedBenchmark {
      */
     @Scheduled(fixedRate = 60000)
     public void generateBenchmarks() {
-        long now = Instant.now().getEpochSecond();
+        // score = epochDay: LiveBenchmarkProvider와 동일한 스케일 사용 (통일)
+        long today = LocalDate.now().toEpochDay();
 
         for (BenchmarkSpec spec : INDICES) {
-            boolean isOpen = spec.code().contains("KOSPI") ? 
+            boolean isOpen = spec.code().contains("KOSPI") ?
                     marketHoursService.isKrxOpen() : marketHoursService.isNyseOpen();
 
             if (!isOpen) continue;
@@ -67,16 +68,17 @@ public class SimulatedBenchmark {
             BigDecimal nextPrice = calculateNextPrice(spec, lastPrice);
             currentPrices.put(spec.code(), nextPrice);
 
-            // 1. 실시간 현재가 저장 (String)
+            // 1. 실시간 현재가 저장
             String priceKey = RedisKeyConstants.getBenchmarkKey(PriceMode.DEMO, spec.code());
             redisTemplate.opsForValue().set(priceKey, nextPrice.toString(), Duration.ofMinutes(5));
 
-            // 2. 이력 저장 (ZSet)
+            // 2. 이력 저장 (ZSet, score = epochDay): 동일 날짜 UPSERT
             String historyKey = RedisKeyConstants.getBenchmarkHistoryKey(PriceMode.DEMO, spec.code());
-            redisTemplate.opsForZSet().add(historyKey, nextPrice.toString(), now);
-            
-            long ninetyDaysAgo = now - (90 * 24 * 60 * 60);
-            redisTemplate.opsForZSet().removeRangeByScore(historyKey, 0, ninetyDaysAgo);
+            redisTemplate.opsForZSet().removeRangeByScore(historyKey, today, today);
+            redisTemplate.opsForZSet().add(historyKey, nextPrice.toString(), today);
+
+            long ninetyDaysAgo = today - 90;
+            redisTemplate.opsForZSet().removeRangeByScore(historyKey, 0, ninetyDaysAgo - 1);
         }
     }
 

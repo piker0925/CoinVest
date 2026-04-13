@@ -227,18 +227,13 @@ public class BenchmarkService {
 
     /**
      * 목표일 이전 가장 가까운 벤치마크 값 조회 (ZREVRANGEBYSCORE).
-     * Score = LocalDate.toEpochDay() (SimulatedBenchmark은 epochSecond 사용 — 추후 통일 필요)
+     * Score = LocalDate.toEpochDay() — SimulatedBenchmark, LiveBenchmarkProvider 모두 동일.
      */
     private BigDecimal getClosestBenchmarkValue(String historyKey, LocalDate targetDate) {
-        // SimulatedBenchmark는 score=epochSecond, LiveBenchmarkProvider는 score=epochDay.
-        // Demo 모드에서는 epochSecond 기반으로 조회해야 함.
-        // targetDate.atStartOfDay()의 epochSecond ~ targetDate.atTime(23,59,59)의 epochSecond 범위
-        long dayStartEpochSec  = targetDate.atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond();
-        long dayEndEpochSec    = targetDate.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond() - 1;
+        long epochDay = targetDate.toEpochDay();
 
-        // Demo (score=epochSecond): 목표일 이전 가장 가까운 값
         var result = redisTemplate.opsForZSet()
-            .reverseRangeByScoreWithScores(historyKey, 0, dayEndEpochSec, 0, 1);
+            .reverseRangeByScoreWithScores(historyKey, 0, epochDay, 0, 1);
 
         if (result != null && !result.isEmpty()) {
             Object val = result.iterator().next().getValue();

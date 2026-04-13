@@ -38,28 +38,43 @@ public class PriceController {
     public ApiResponse<OrderbookResponse> getOrderbook(
             @RequestParam String universalCode,
             @RequestParam(defaultValue = "LIVE") PriceMode mode) {
-        
+
         BigDecimal currentPrice = priceService.getCurrentPrice(universalCode, mode);
         if (currentPrice.compareTo(BigDecimal.ZERO) == 0) {
-            currentPrice = new BigDecimal("98200000"); // Fallback for demo
+            currentPrice = new BigDecimal("98200000");
         }
 
-        // 진짜 호가창 API 연동 전까지는 현재가 기준 시뮬레이션 데이터 반환
+        // 현재가의 마지막 4자리를 시드로 사용: 가격이 변할 때만 호가 변화, 폴링마다 랜덤하게 깜빡이지 않음
+        int seed = currentPrice.abs().remainder(new BigDecimal(10000)).intValue();
+
         List<OrderbookResponse.OrderbookUnit> sells = new ArrayList<>();
         List<OrderbookResponse.OrderbookUnit> buys = new ArrayList<>();
 
+        BigDecimal tickUnit = new BigDecimal("0.001");
+
         for (int i = 1; i <= 5; i++) {
-            BigDecimal offset = currentPrice.multiply(new BigDecimal("0.001").multiply(new BigDecimal(i)));
+            BigDecimal offset = currentPrice.multiply(tickUnit.multiply(new BigDecimal(i)));
+
+            // 호가에서 멀수록 물량이 쌓임: quantity = 0.05 + 0.10*i (deterministic)
+            // seed를 이용해 레벨별로 소수점 변화를 주어 단조롭지 않게 함
+            BigDecimal baseQty = new BigDecimal("0.05").add(new BigDecimal("0.10").multiply(new BigDecimal(i)));
+            int noiseDigit = (seed / (int) Math.pow(10, i - 1)) % 10; // 자릿수별로 다른 값 추출
+            BigDecimal noise = new BigDecimal(noiseDigit).multiply(new BigDecimal("0.01"));
+            BigDecimal qty = baseQty.add(noise).setScale(4, RoundingMode.HALF_UP);
+
+            // ratio: 잔량 비율. 멀수록 비율이 높음 (시각적 효과)
+            double ratio = Math.min(100, 10.0 * i + (seed % 10));
+
             sells.add(0, OrderbookResponse.OrderbookUnit.builder()
                     .price(currentPrice.add(offset).setScale(0, RoundingMode.HALF_UP))
-                    .quantity(new BigDecimal(Math.random() * 0.5).setScale(4, RoundingMode.HALF_UP))
-                    .ratio(Math.random() * 100)
+                    .quantity(qty)
+                    .ratio(ratio)
                     .build());
-            
+
             buys.add(OrderbookResponse.OrderbookUnit.builder()
                     .price(currentPrice.subtract(offset).setScale(0, RoundingMode.HALF_UP))
-                    .quantity(new BigDecimal(Math.random() * 0.5).setScale(4, RoundingMode.HALF_UP))
-                    .ratio(Math.random() * 100)
+                    .quantity(qty)
+                    .ratio(ratio)
                     .build());
         }
 

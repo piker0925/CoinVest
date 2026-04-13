@@ -9,9 +9,10 @@ interface OrderbookProps {
         sells: any[];
         buys: any[];
     };
+    currentPrice?: number;
 }
 
-export const Orderbook = ({data}: OrderbookProps) => {
+export const Orderbook = ({data, currentPrice}: OrderbookProps) => {
     const sells = data?.sells ?? [];
     const buys = data?.buys ?? [];
 
@@ -38,11 +39,10 @@ export const Orderbook = ({data}: OrderbookProps) => {
                 <div
                     className="h-10 bg-slate-950 flex items-center justify-center border-y border-slate-700 shadow-[inset_0_0_15px_rgba(0,0,0,0.5)]">
                     <div className="flex items-center gap-2">
-                        <span className="text-lg font-bold text-red-500 tracking-tight">98,200,000</span>
-                        <div className="flex flex-col text-[9px] font-bold">
-                            <TrendingUp size={10} className="text-red-500"/>
-                            <span className="text-red-500">+1.48%</span>
-                        </div>
+                        <span className="text-lg font-bold text-red-500 tracking-tight">
+                            {currentPrice != null ? Math.round(currentPrice).toLocaleString() : '—'}
+                        </span>
+                        <TrendingUp size={10} className="text-red-500"/>
                     </div>
                 </div>
 

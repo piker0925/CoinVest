@@ -1,5 +1,7 @@
 package com.coinvest.trading.service;
 
+import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
@@ -30,6 +32,8 @@ public class LimitOrderMatchingService {
     private final PositionRepository positionRepository;
     private final TradeRepository tradeRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final AssetRepository assetRepository;
+    private final MarketHoursService marketHoursService;
 
     private static final BigDecimal FEE_RATE = new BigDecimal("0.0005");
 
@@ -127,6 +131,10 @@ public class LimitOrderMatchingService {
         position.addPosition(currentPrice, quantity);
         positionRepository.save(position);
 
+        Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode())
+                .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, LocalDate.now());
+
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
@@ -137,7 +145,7 @@ public class LimitOrderMatchingService {
                 .fee(actualFee)
                 .realizedPnl(BigDecimal.ZERO)
                 .priceMode(mode)
-                .settlementDate(LocalDate.now()) // 코인은 T+0 (임시)
+                .settlementDate(settlementDate)
                 .build();
         trade = tradeRepository.save(trade);
 
@@ -187,6 +195,10 @@ public class LimitOrderMatchingService {
         position.subtractPosition(currentPrice, quantity);
         balance.increaseAvailable(expectedReturn);
 
+        Asset sellAsset = assetRepository.findByUniversalCode(order.getUniversalCode())
+                .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(sellAsset, LocalDate.now());
+
         Trade trade = Trade.builder()
                 .order(order)
                 .user(order.getUser())
@@ -197,7 +209,7 @@ public class LimitOrderMatchingService {
                 .fee(fee)
                 .realizedPnl(BigDecimalUtil.formatKrw(realizedPnl))
                 .priceMode(mode)
-                .settlementDate(LocalDate.now())
+                .settlementDate(settlementDate)
                 .build();
         trade = tradeRepository.save(trade);
 

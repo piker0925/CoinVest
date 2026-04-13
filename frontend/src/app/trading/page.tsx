@@ -205,7 +205,7 @@ export default function TradingPage() {
                         <ArrowRightLeft size={14} className="text-slate-500"/>
                         <span className="text-xs font-bold text-slate-400">호가창</span>
                     </div>
-                    <Orderbook data={orderbook}/>
+                    <Orderbook data={orderbook} currentPrice={tickerPrice}/>
                 </div>
                 <div
                     className="flex-[2] bg-slate-900/40 border border-slate-800 rounded-lg flex flex-col overflow-hidden">
