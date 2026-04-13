@@ -32,8 +32,7 @@ public class BotPerformanceProviderImpl implements BotPerformanceProvider {
     public List<BotReturn> getReturns(PriceMode mode, Period period) {
         String periodCode = period.getCode();
 
-        return botRepository.findAll().stream()
-                .filter(bot -> bot.getPriceMode() == mode)
+        return botRepository.findAllByPriceMode(mode).stream()
                 .flatMap(bot -> statisticsRepository.findByBotAndPeriod(bot, periodCode)
                         .filter(stat -> stat.getReturnRate() != null)
                         .map(stat -> toBotReturn(bot, stat))

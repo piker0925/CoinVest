@@ -43,7 +43,12 @@ export default function DashboardPage() {
 
     if (!user) return null;
 
-    const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl ?? 0), 0);
+    const totalUnrealizedPnlKrw = positions
+        .filter((p) => p.currency === 'KRW')
+        .reduce((sum, p) => sum + (p.unrealizedPnl ?? 0), 0);
+    const totalUnrealizedPnlUsd = positions
+        .filter((p) => p.currency === 'USD')
+        .reduce((sum, p) => sum + (p.unrealizedPnl ?? 0), 0);
     const activeBotCount = bots.filter((b) => b.status === 'ACTIVE').length;
 
     return (
@@ -87,7 +92,7 @@ export default function DashboardPage() {
                 <Card className="bg-slate-900/50 border-slate-800">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-xs font-bold text-slate-500 uppercase">총 미실현 손익</CardTitle>
-                        {totalUnrealizedPnl >= 0 ? (
+                        {totalUnrealizedPnlKrw >= 0 ? (
                             <TrendingUp className="w-4 h-4 text-emerald-500"/>
                         ) : (
                             <TrendingDown className="w-4 h-4 text-red-500"/>
@@ -97,14 +102,27 @@ export default function DashboardPage() {
                         {isAccountLoading ? (
                             <Skeleton className="h-8 w-36"/>
                         ) : (
-                            <div
-                                className={`text-2xl font-mono font-bold ${
-                                    totalUnrealizedPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                                }`}
-                            >
-                                {totalUnrealizedPnl >= 0 ? '+' : ''}
-                                {Math.round(totalUnrealizedPnl).toLocaleString()}{' '}
-                                <span className="text-xs">KRW</span>
+                            <div className="space-y-1">
+                                <div
+                                    className={`text-2xl font-mono font-bold ${
+                                        totalUnrealizedPnlKrw >= 0 ? 'text-emerald-500' : 'text-red-500'
+                                    }`}
+                                >
+                                    {totalUnrealizedPnlKrw >= 0 ? '+' : ''}
+                                    {Math.round(totalUnrealizedPnlKrw).toLocaleString()}{' '}
+                                    <span className="text-xs">KRW</span>
+                                </div>
+                                {totalUnrealizedPnlUsd !== 0 && (
+                                    <div
+                                        className={`text-sm font-mono ${
+                                            totalUnrealizedPnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                        }`}
+                                    >
+                                        {totalUnrealizedPnlUsd >= 0 ? '+' : ''}
+                                        {totalUnrealizedPnlUsd.toFixed(2)}{' '}
+                                        <span className="text-xs text-slate-500">USD</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </CardContent>

@@ -16,6 +16,8 @@ public interface TradingBotRepository extends JpaRepository<TradingBot, Long> {
     
     List<TradingBot> findByStatusAndPriceMode(BotStatus status, PriceMode priceMode);
 
+    List<TradingBot> findAllByPriceMode(PriceMode priceMode);
+
     @Query("SELECT b FROM TradingBot b WHERE b.status = :status")
     List<TradingBot> findActiveBots(BotStatus status);
 }

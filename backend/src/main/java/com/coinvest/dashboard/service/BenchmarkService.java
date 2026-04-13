@@ -68,61 +68,16 @@ public class BenchmarkService {
      */
     public PerformanceResponse getMyPerformance(Long portfolioId, Long userId, Period period) {
         Portfolio portfolio = findPortfolioWithOwnerCheck(portfolioId, userId);
-        PriceMode mode = PriceModeResolver.resolve(portfolio.getUser().getRole());
 
         PortfolioValuation valuation = valuationService.evaluate(portfolioId);
         if (valuation == null) {
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
 
+        BigDecimal returnRate = calculateReturnRate(portfolio, period, valuation);
         BigDecimal totalValueNow = Optional.ofNullable(valuation.getTotalEvaluationBase()).orElse(BigDecimal.ZERO)
             .add(Optional.ofNullable(valuation.getBuyingPowerBase()).orElse(BigDecimal.ZERO));
         BigDecimal ncNow = Optional.ofNullable(portfolio.getNetContribution()).orElse(BigDecimal.ZERO);
-
-        BigDecimal returnRate;
-        if (period == Period.ALL) {
-            // ALL: 순기여금 대비 현재 수익률
-            returnRate = ncNow.compareTo(BigDecimal.ZERO) == 0
-                ? BigDecimal.ZERO
-                : totalValueNow.subtract(ncNow)
-                    .divide(ncNow, 4, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100));
-        } else {
-            // 1M / 3M: 과거 스냅샷 기반 Modified Simple Return
-            // createdAt이 null인 경우 1년 전을 기본값으로 사용 (극단적 초기 상태 방어)
-            LocalDate portfolioCreatedDate = portfolio.getCreatedAt() != null
-                ? portfolio.getCreatedAt().toLocalDate()
-                : LocalDate.now().minusYears(1);
-            LocalDate startDate = period.getStartDate(portfolioCreatedDate);
-            Optional<PortfolioSnapshot> startSnapshotOpt =
-                snapshotService.getClosestSnapshotBefore(portfolioId, startDate);
-
-            if (startSnapshotOpt.isEmpty()) {
-                // 스냅샷 없으면 ALL 공식으로 fallback (초기 가동 구간)
-                log.debug("No snapshot found for portfolioId={}, period={}. Falling back to ALL formula.",
-                    portfolioId, period);
-                returnRate = ncNow.compareTo(BigDecimal.ZERO) == 0
-                    ? BigDecimal.ZERO
-                    : totalValueNow.subtract(ncNow)
-                        .divide(ncNow, 4, RoundingMode.HALF_UP)
-                        .multiply(BigDecimal.valueOf(100));
-            } else {
-                PortfolioSnapshot startSnapshot = startSnapshotOpt.get();
-                BigDecimal vStart = Optional.ofNullable(startSnapshot.getTotalEvaluationBase()).orElse(BigDecimal.ZERO);
-                BigDecimal ncStart = Optional.ofNullable(startSnapshot.getNetContribution()).orElse(BigDecimal.ZERO);
-
-                if (vStart.compareTo(BigDecimal.ZERO) == 0) {
-                    returnRate = BigDecimal.ZERO;
-                } else {
-                    // (V_now - V_start - (NC_now - NC_start)) / V_start × 100
-                    BigDecimal ncDelta = ncNow.subtract(ncStart);
-                    returnRate = totalValueNow.subtract(vStart).subtract(ncDelta)
-                        .divide(vStart, 4, RoundingMode.HALF_UP)
-                        .multiply(BigDecimal.valueOf(100));
-                }
-            }
-        }
-
         BigDecimal profitLoss = totalValueNow.subtract(ncNow);
 
         return PerformanceResponse.builder()
@@ -139,15 +94,69 @@ public class BenchmarkService {
     }
 
     /**
+     * 수익률 계산 — Portfolio를 직접 받아 DB 재조회 없이 계산.
+     * getMyPerformance()와 compareBenchmarks() 양쪽에서 재사용.
+     */
+    private BigDecimal calculateReturnRate(Portfolio portfolio, Period period, PortfolioValuation valuation) {
+        BigDecimal totalValueNow = Optional.ofNullable(valuation.getTotalEvaluationBase()).orElse(BigDecimal.ZERO)
+            .add(Optional.ofNullable(valuation.getBuyingPowerBase()).orElse(BigDecimal.ZERO));
+        BigDecimal ncNow = Optional.ofNullable(portfolio.getNetContribution()).orElse(BigDecimal.ZERO);
+
+        if (period == Period.ALL) {
+            // ALL: 순기여금 대비 현재 수익률
+            return ncNow.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : totalValueNow.subtract(ncNow)
+                    .divide(ncNow, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+        }
+
+        // 1M / 3M: 과거 스냅샷 기반 Modified Simple Return
+        LocalDate portfolioCreatedDate = portfolio.getCreatedAt() != null
+            ? portfolio.getCreatedAt().toLocalDate()
+            : LocalDate.now().minusYears(1);
+        LocalDate startDate = period.getStartDate(portfolioCreatedDate);
+        Optional<PortfolioSnapshot> startSnapshotOpt =
+            snapshotService.getClosestSnapshotBefore(portfolio.getId(), startDate);
+
+        if (startSnapshotOpt.isEmpty()) {
+            log.debug("No snapshot found for portfolioId={}, period={}. Falling back to ALL formula.",
+                portfolio.getId(), period);
+            return ncNow.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : totalValueNow.subtract(ncNow)
+                    .divide(ncNow, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+        }
+
+        PortfolioSnapshot startSnapshot = startSnapshotOpt.get();
+        BigDecimal vStart = Optional.ofNullable(startSnapshot.getTotalEvaluationBase()).orElse(BigDecimal.ZERO);
+        BigDecimal ncStart = Optional.ofNullable(startSnapshot.getNetContribution()).orElse(BigDecimal.ZERO);
+
+        if (vStart.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+
+        // (V_now - V_start - (NC_now - NC_start)) / V_start × 100
+        BigDecimal ncDelta = ncNow.subtract(ncStart);
+        return totalValueNow.subtract(vStart).subtract(ncDelta)
+            .divide(vStart, 4, RoundingMode.HALF_UP)
+            .multiply(BigDecimal.valueOf(100));
+    }
+
+    /**
      * 벤치마크 비교 — 내 수익률 vs 지수 vs 봇 전략.
      */
     public BenchmarkComparison compareBenchmarks(Long portfolioId, Long userId, Period period) {
-        Portfolio portfolio = findPortfolioWithOwnerCheck(portfolioId, userId);
+        Portfolio portfolio = findPortfolioWithOwnerCheck(portfolioId, userId); // 1회만 조회
         PriceMode mode = PriceModeResolver.resolve(portfolio.getUser().getRole());
 
-        // 내 수익률
-        PerformanceResponse myPerformance = getMyPerformance(portfolioId, userId, period);
-        BigDecimal myReturn = myPerformance.getReturnRate();
+        // 내 수익률 — portfolio 재사용으로 DB 조회 없음
+        PortfolioValuation valuation = valuationService.evaluate(portfolioId);
+        if (valuation == null) {
+            throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
+        }
+        BigDecimal myReturn = calculateReturnRate(portfolio, period, valuation).setScale(2, RoundingMode.HALF_UP);
 
         // 벤치마크 지수 수익률
         Map<String, String> indexNames = mode == PriceMode.DEMO ? DEMO_INDEX_NAMES : LIVE_INDEX_NAMES;

@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 public record PositionResponse(
     Long id,
     String universalCode,
+    String currency,
     BigDecimal avgBuyPrice,
     BigDecimal quantity,
     BigDecimal lockedQuantity,
@@ -31,6 +32,7 @@ public record PositionResponse(
         return new PositionResponse(
             position.getId(),
             position.getUniversalCode(),
+            position.getCurrency().name(),
             position.getAvgBuyPrice(),
             position.getQuantity(),
             position.getLockedQuantity(),

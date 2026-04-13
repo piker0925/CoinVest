@@ -11,11 +11,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.script.RedisScript;
+
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,12 +40,23 @@ public class MonitoringService {
     private static final String METRIC_KEY = "metrics:system";
     private static final long RETENTION_HOURS = 24;
 
+    // 동일 score 구간의 기존 엔트리 제거 후 신규 삽입 — 원자적 보장 (D4-5)
+    private static final RedisScript<Long> UPSERT_METRIC_SCRIPT = RedisScript.of(
+            "local score = tonumber(ARGV[1])\n" +
+            "redis.call('ZREMRANGEBYSCORE', KEYS[1], score, score)\n" +
+            "return redis.call('ZADD', KEYS[1], score, ARGV[2])",
+            Long.class
+    );
+
     /**
      * 매 분 0초마다 시스템 지표 수집 및 저장.
      */
     @Scheduled(cron = "0 * * * * *")
     public void collectMetrics() {
-        LocalDateTime now = LocalDateTime.now();
+        // Instant 기반 분 절사: 타임존 오해 없이 정확한 Epoch 계산
+        Instant truncatedNow = Instant.now().truncatedTo(ChronoUnit.MINUTES);
+        LocalDateTime now = LocalDateTime.ofInstant(truncatedNow, ZoneId.systemDefault());
+
         SystemMetric metric = SystemMetric.builder()
                 .timestamp(now)
                 .cpuUsage(getCpuUsage())
@@ -52,15 +66,15 @@ public class MonitoringService {
                 .dbIdleConn(dataSource.getHikariPoolMXBean().getIdleConnections())
                 .build();
 
-        saveToRedis(metric);
-        purgeOldMetrics(now);
+        saveToRedis(metric, truncatedNow.getEpochSecond());
+        purgeOldMetrics(truncatedNow);
     }
 
     /**
      * 최근 24시간 내의 지표 목록 조회.
      */
     public List<SystemMetric> getRecentMetrics() {
-        long minScore = LocalDateTime.now().minusHours(RETENTION_HOURS).toEpochSecond(ZoneOffset.UTC);
+        long minScore = Instant.now().minus(RETENTION_HOURS, ChronoUnit.HOURS).getEpochSecond();
         Set<String> jsonMetrics = redisTemplate.opsForZSet().rangeByScore(METRIC_KEY, minScore, Double.MAX_VALUE);
 
         if (jsonMetrics == null) return List.of();
@@ -79,16 +93,13 @@ public class MonitoringService {
     }
 
     private double getCpuUsage() {
-        try {
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            java.lang.reflect.Method method = osBean.getClass().getMethod("getCpuLoad");
-            method.setAccessible(true);
-            Double load = (Double) method.invoke(osBean);
-            return load * 100.0;
-        } catch (Exception e) {
-            log.warn("Failed to get CPU usage via reflection: {}", e.getMessage());
-            return -1.0;
+        OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
+        if (osBean instanceof com.sun.management.OperatingSystemMXBean sunOsBean) {
+            double load = sunOsBean.getCpuLoad();
+            return load < 0 ? -1.0 : load * 100.0;
         }
+        log.warn("com.sun.management.OperatingSystemMXBean not available on this JVM");
+        return -1.0;
     }
 
     private long getMemoryUsed() {
@@ -100,18 +111,19 @@ public class MonitoringService {
         return Runtime.getRuntime().maxMemory() / (1024 * 1024);
     }
 
-    private void saveToRedis(SystemMetric metric) {
+    private void saveToRedis(SystemMetric metric, long score) {
         try {
             String json = objectMapper.writeValueAsString(metric);
-            long score = metric.getTimestamp().toEpochSecond(ZoneOffset.UTC);
-            redisTemplate.opsForZSet().add(METRIC_KEY, json, score);
+            redisTemplate.execute(UPSERT_METRIC_SCRIPT,
+                    List.of(METRIC_KEY),
+                    String.valueOf(score), json);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize system metric", e);
         }
     }
 
-    private void purgeOldMetrics(LocalDateTime now) {
-        long maxScore = now.minusHours(RETENTION_HOURS).toEpochSecond(ZoneOffset.UTC);
+    private void purgeOldMetrics(Instant now) {
+        long maxScore = now.minus(RETENTION_HOURS, ChronoUnit.HOURS).getEpochSecond();
         redisTemplate.opsForZSet().removeRangeByScore(METRIC_KEY, 0, maxScore);
     }
 }
