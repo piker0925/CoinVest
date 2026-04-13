@@ -15,6 +15,10 @@ spring:
     init:
       mode: never
 
+app:
+  cookie:
+    secure: true # 운영 환경(HTTPS)에서는 Secure 쿠키 강제
+
 logging:
   level:
     root: INFO

@@ -27,6 +27,10 @@ jwt:
   access-token-expiration: 3600000 # 1 hour
   refresh-token-expiration: 1209600000 # 14 days
 
+app:
+  cookie:
+    secure: false # 로컬(HTTP) 환경 기본값. 운영(HTTPS)에서는 true로 오버라이드
+
 trading:
   bot:
     enabled: false

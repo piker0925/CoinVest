@@ -3,9 +3,9 @@ package com.coinvest.auth.service;
 import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.auth.domain.UserRole;
+import com.coinvest.auth.dto.AuthTokenResult;
 import com.coinvest.auth.dto.LoginRequest;
 import com.coinvest.auth.dto.SignupRequest;
-import com.coinvest.auth.dto.TokenResponse;
 import com.coinvest.auth.dto.UserResponse;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
@@ -54,7 +54,7 @@ public class AuthService {
      * 로그인
      */
     @Transactional
-    public TokenResponse login(LoginRequest request) {
+    public AuthTokenResult login(LoginRequest request) {
         if (loginFailureService.isBlocked(request.getEmail())) {
             throw new BusinessException(ErrorCode.AUTH_TOO_MANY_ATTEMPTS);
         }
@@ -80,14 +80,12 @@ public class AuthService {
         }
 
         loginFailureService.resetAttempts(request.getEmail());
-        
-        // userId 추가 전달
+
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getEmail());
-
         tokenService.saveRefreshToken(user.getEmail(), refreshToken, refreshTokenExpiration);
 
-        return TokenResponse.of(accessToken, refreshToken);
+        return new AuthTokenResult(accessToken, refreshToken, user.getEmail(), "ROLE_" + user.getRole().name());
     }
 
     /**
@@ -110,7 +108,7 @@ public class AuthService {
      * 토큰 재발급
      */
     @Transactional
-    public TokenResponse reissue(String refreshToken) {
+    public AuthTokenResult reissue(String refreshToken) {
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
         }
@@ -126,12 +124,10 @@ public class AuthService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
 
-        // userId 추가 전달
         String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
         String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getEmail());
-
         tokenService.saveRefreshToken(email, newRefreshToken, refreshTokenExpiration);
 
-        return TokenResponse.of(newAccessToken, newRefreshToken);
+        return new AuthTokenResult(newAccessToken, newRefreshToken, user.getEmail(), "ROLE_" + user.getRole().name());
     }
 }
