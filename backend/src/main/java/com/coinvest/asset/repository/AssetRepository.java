@@ -11,4 +11,5 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
     Optional<Asset> findByUniversalCode(String universalCode);
     Optional<Asset> findByExternalCode(String externalCode);
     List<Asset> findAllByAssetClass(AssetClass assetClass);
+    List<Asset> findAllByIsDemo(boolean isDemo);
 }

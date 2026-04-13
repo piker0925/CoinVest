@@ -2,6 +2,7 @@ package com.coinvest.price.controller;
 
 import com.coinvest.global.common.ApiResponse;
 import com.coinvest.global.common.PriceMode;
+import com.coinvest.price.dto.CandleData;
 import com.coinvest.price.dto.OrderbookResponse;
 import com.coinvest.price.service.PriceService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,13 @@ public class PriceController {
             @RequestParam String universalCode,
             @RequestParam(defaultValue = "LIVE") PriceMode mode) {
         return ApiResponse.success(priceService.getCurrentPrice(universalCode, mode));
+    }
+
+    @GetMapping("/candles")
+    public ApiResponse<List<CandleData>> getCandles(
+            @RequestParam String universalCode,
+            @RequestParam(defaultValue = "LIVE") PriceMode mode) {
+        return ApiResponse.success(priceService.getCandles(universalCode, mode));
     }
 
     @GetMapping("/orderbook")

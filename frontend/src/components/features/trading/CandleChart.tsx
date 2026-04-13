@@ -1,33 +1,37 @@
 'use client';
 
 import React, {useEffect, useRef} from 'react';
-import {ColorType, createChart, IChartApi} from 'lightweight-charts';
+import {ColorType, createChart, IChartApi, ISeriesApi} from 'lightweight-charts';
+import {useQuery} from '@tanstack/react-query';
+import {tradingService} from '@/services/tradingService';
+import {PriceMode} from '@/store/useAuthStore';
 
-// Mock Candle Data
-const initialData = [
-    {time: '2026-04-01', open: 95000000, high: 96500000, low: 94500000, close: 96000000},
-    {time: '2026-04-02', open: 96000000, high: 97800000, low: 95800000, close: 97200000},
-    {time: '2026-04-03', open: 97200000, high: 97500000, low: 96200000, close: 96800000},
-    {time: '2026-04-04', open: 96800000, high: 98500000, low: 96500000, close: 98200000},
-    {time: '2026-04-05', open: 98200000, high: 99200000, low: 97800000, close: 98800000},
-    {time: '2026-04-06', open: 98800000, high: 98900000, low: 97200000, close: 97800000},
-    {time: '2026-04-07', open: 97800000, high: 99500000, low: 97500000, close: 99100000},
-    {time: '2026-04-08', open: 99100000, high: 99800000, low: 98800000, close: 99400000},
-    {time: '2026-04-09', open: 99400000, high: 99600000, low: 97500000, close: 98200000},
-    {time: '2026-04-10', open: 98200000, high: 98800000, low: 97800000, close: 98200000},
-];
+interface CandleChartProps {
+    universalCode: string;
+    mode: PriceMode;
+}
 
-export const CandleChart = () => {
+export const CandleChart = ({universalCode, mode}: CandleChartProps) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
+    const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
+    const {data: candles = []} = useQuery({
+        queryKey: ['candles', universalCode, mode],
+        queryFn: () => tradingService.getCandles(universalCode, mode),
+        enabled: !!universalCode,
+        refetchInterval: 60_000, // 1분 주기 갱신
+        staleTime: 55_000,
+    });
+
+    // 차트 초기화 (마운트 시 1회)
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
-        // Strict Mode 중복 렌더링 방지: 이미 차트가 있으면 제거 후 재생성
         if (chartRef.current) {
             chartRef.current.remove();
             chartRef.current = null;
+            seriesRef.current = null;
         }
 
         const chart = createChart(chartContainerRef.current, {
@@ -53,9 +57,8 @@ export const CandleChart = () => {
             wickDownColor: '#3b82f6',
         });
 
-        candleSeries.setData(initialData);
-        chart.timeScale().fitContent();
         chartRef.current = chart;
+        seriesRef.current = candleSeries;
 
         const handleResize = () => {
             if (chartContainerRef.current && chartRef.current) {
@@ -70,11 +73,27 @@ export const CandleChart = () => {
             if (chartRef.current) {
                 chartRef.current.remove();
                 chartRef.current = null;
+                seriesRef.current = null;
             }
         };
     }, []);
 
+    // 데이터 갱신 시 시리즈 업데이트
+    useEffect(() => {
+        if (!seriesRef.current || candles.length === 0) return;
+        seriesRef.current.setData(candles as any);
+        chartRef.current?.timeScale().fitContent();
+    }, [candles]);
+
     return (
-        <div ref={chartContainerRef} className="w-full h-full relative min-h-[400px]"/>
+        <div className="relative w-full h-full min-h-[400px]">
+            <div ref={chartContainerRef} className="w-full h-full"/>
+            {candles.length === 0 && (
+                <div
+                    className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm pointer-events-none">
+                    가격 데이터 수집 중입니다...
+                </div>
+            )}
+        </div>
     );
 };

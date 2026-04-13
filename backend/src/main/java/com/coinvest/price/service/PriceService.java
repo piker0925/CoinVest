@@ -4,6 +4,7 @@ import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.RedisKeyConstants;
+import com.coinvest.price.dto.CandleData;
 import com.coinvest.price.dto.TickerEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +86,48 @@ public class PriceService {
                         return getCurrentPrice(universalCodes.get(i), mode);
                     }
                 ));
+    }
+
+    /**
+     * 5분봉 캔들 데이터 조회.
+     * Redis price window LIST (index 0 = 최신) 에서 close 가격을 읽어
+     * OHLC를 합성(인접 close 기반)한 후 오래된 순서로 반환.
+     */
+    public List<CandleData> getCandles(String universalCode, PriceMode mode) {
+        String windowKey = RedisKeyConstants.getPriceWindowKey(mode, universalCode);
+        String slotKey = RedisKeyConstants.getPriceWindowSlotKey(mode, universalCode);
+
+        List<Object> rawPrices = redisTemplate.opsForList().range(windowKey, 0, -1);
+        Object currentSlotObj = redisTemplate.opsForValue().get(slotKey);
+
+        if (rawPrices == null || rawPrices.isEmpty() || currentSlotObj == null) {
+            return List.of();
+        }
+
+        long currentSlot = Long.parseLong(currentSlotObj.toString());
+        long candleIntervalSec = 5 * 60L; // 5분 = 300초
+
+        int size = rawPrices.size();
+        List<CandleData> candles = new ArrayList<>(size);
+
+        // rawPrices[0] = 최신(currentSlot), rawPrices[i] = currentSlot-i 슬롯
+        // 오래된 것부터 순서대로 생성 (lightweight-charts는 시간 오름차순 필요)
+        for (int i = size - 1; i >= 0; i--) {
+            double close = Double.parseDouble(rawPrices.get(i).toString());
+            long time = (currentSlot - i) * candleIntervalSec;
+
+            // open = 이전 슬롯의 close (없으면 현재 close)
+            double open = (i < size - 1)
+                    ? Double.parseDouble(rawPrices.get(i + 1).toString())
+                    : close;
+
+            double high = Math.max(open, close);
+            double low = Math.min(open, close);
+
+            candles.add(new CandleData(time, open, high, low, close));
+        }
+
+        return candles;
     }
 
     private Optional<BigDecimal> fetchRealtimePrice(String universalCode, PriceMode mode) {
