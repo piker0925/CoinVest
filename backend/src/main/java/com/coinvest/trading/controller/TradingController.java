@@ -67,6 +67,20 @@ public class TradingController {
         return ApiResponse.success(tradingQueryService.getTrades(getUserId(authentication), cursorId, size));
     }
 
+    @DeleteMapping("/orders/{orderId}")
+    public ApiResponse<Void> cancelOrder(
+            Authentication authentication,
+            @PathVariable Long orderId) {
+        tradingService.cancelOrder(getUserId(authentication), orderId);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/account/reset")
+    public ApiResponse<Void> resetAccount(Authentication authentication) {
+        tradingService.resetAccount(getUserId(authentication));
+        return ApiResponse.success(null);
+    }
+
     private Long getUserId(Authentication authentication) {
         // 토큰 기반 인증이므로 Principal이 email일 것임. 
         // 실제 운영 환경에선 CustomUserDetails를 통해 ID를 바로 가져오도록 개선 가능.

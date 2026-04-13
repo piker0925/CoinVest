@@ -14,4 +14,5 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
     Optional<Position> findByUserIdAndUniversalCodeAndPriceMode(Long userId, String universalCode, PriceMode priceMode);
     List<Position> findAllByUserId(Long userId);
     List<Position> findByUserIdAndPriceMode(Long userId, PriceMode priceMode);
+    void deleteAllByUserIdAndPriceMode(Long userId, PriceMode priceMode);
 }

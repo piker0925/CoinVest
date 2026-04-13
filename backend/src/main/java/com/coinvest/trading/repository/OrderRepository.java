@@ -1,5 +1,6 @@
 package com.coinvest.trading.repository;
 
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.trading.domain.Order;
 import com.coinvest.trading.domain.OrderStatus;
 import org.springframework.data.domain.Pageable;
@@ -28,4 +29,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findAllByReservationAndStatus(boolean reservation, OrderStatus status);
 
     Slice<Order> findByStatusAndCreatedAtBefore(OrderStatus status, java.time.LocalDateTime createdAt, Pageable pageable);
+
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM Order o WHERE o.user.id = :userId AND o.priceMode = :priceMode")
+    void deleteAllByUserIdAndPriceMode(@Param("userId") Long userId, @Param("priceMode") PriceMode priceMode);
 }

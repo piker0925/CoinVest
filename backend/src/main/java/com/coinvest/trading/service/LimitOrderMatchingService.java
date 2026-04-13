@@ -1,6 +1,7 @@
 package com.coinvest.trading.service;
 
 import com.coinvest.asset.domain.Asset;
+import com.coinvest.asset.domain.AssetClass;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.PriceMode;
@@ -33,6 +34,7 @@ public class LimitOrderMatchingService {
     private final BalanceRepository balanceRepository;
     private final PositionRepository positionRepository;
     private final TradeRepository tradeRepository;
+    private final SettlementRepository settlementRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AssetRepository assetRepository;
     private final MarketHoursService marketHoursService;
@@ -58,10 +60,14 @@ public class LimitOrderMatchingService {
 
         if (matchingOrderIds == null || matchingOrderIds.isEmpty()) return;
 
+        // N+1 방지: 루프 밖에서 Asset 1회 조회 후 각 트랜잭션에 주입
+        Asset asset = assetRepository.findByUniversalCode(universalCode)
+                .orElseThrow(() -> new RuntimeException("Asset not found: " + universalCode));
+
         for (Object orderIdObj : matchingOrderIds) {
             Long orderId = Long.valueOf(orderIdObj.toString());
             try {
-                boolean filled = executeBuyOrderInTransaction(orderId, currentPrice, tradeDate);
+                boolean filled = executeBuyOrderInTransaction(orderId, currentPrice, tradeDate, asset);
                 if (filled) {
                     redisTemplate.opsForZSet().remove(key, orderIdObj);
                 }
@@ -77,10 +83,14 @@ public class LimitOrderMatchingService {
 
         if (matchingOrderIds == null || matchingOrderIds.isEmpty()) return;
 
+        // N+1 방지: 루프 밖에서 Asset 1회 조회 후 각 트랜잭션에 주입
+        Asset asset = assetRepository.findByUniversalCode(universalCode)
+                .orElseThrow(() -> new RuntimeException("Asset not found: " + universalCode));
+
         for (Object orderIdObj : matchingOrderIds) {
             Long orderId = Long.valueOf(orderIdObj.toString());
             try {
-                boolean filled = executeSellOrderInTransaction(orderId, currentPrice, tradeDate);
+                boolean filled = executeSellOrderInTransaction(orderId, currentPrice, tradeDate, asset);
                 if (filled) {
                     redisTemplate.opsForZSet().remove(key, orderIdObj);
                 }
@@ -96,7 +106,7 @@ public class LimitOrderMatchingService {
      * @param tradeDate 체결 기준일 (KST). 정산일 계산의 기준이 됨.
      */
     @Transactional
-    public boolean executeBuyOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate) {
+    public boolean executeBuyOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate, Asset asset) {
         int updated = orderRepository.updateStatusToFilledIfPending(orderId);
         if (updated == 0) {
             return true; // Self-healing
@@ -138,8 +148,6 @@ public class LimitOrderMatchingService {
         position.addPosition(currentPrice, quantity);
         positionRepository.save(position);
 
-        Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode())
-                .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
         LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, tradeDate);
 
         Trade trade = Trade.builder()
@@ -177,7 +185,7 @@ public class LimitOrderMatchingService {
      * @param tradeDate 체결 기준일 (KST). 정산일 계산의 기준이 됨.
      */
     @Transactional
-    public boolean executeSellOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate) {
+    public boolean executeSellOrderInTransaction(Long orderId, BigDecimal currentPrice, LocalDate tradeDate, Asset asset) {
         int updated = orderRepository.updateStatusToFilledIfPending(orderId);
         if (updated == 0) {
             return true; // Self-healing
@@ -200,13 +208,16 @@ public class LimitOrderMatchingService {
         BigDecimal expectedReturn = BigDecimalUtil.formatKrw(totalAmount.subtract(fee));
 
         BigDecimal realizedPnl = currentPrice.subtract(position.getAvgBuyPrice()).multiply(quantity);
-        
-        position.subtractPosition(currentPrice, quantity);
-        balance.increaseAvailable(expectedReturn);
 
-        Asset sellAsset = assetRepository.findByUniversalCode(order.getUniversalCode())
-                .orElseThrow(() -> new RuntimeException("Asset not found: " + order.getUniversalCode()));
-        LocalDate settlementDate = marketHoursService.calculateSettlementDate(sellAsset, tradeDate);
+        position.subtractPosition(currentPrice, quantity);
+
+        // CRYPTO/VIRTUAL: T+0 즉시 가용. 주식/ETF: T+2 정산 대기 (TradingService 패턴 통일)
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, tradeDate);
+        if (asset.getAssetClass() == AssetClass.CRYPTO || asset.getAssetClass() == AssetClass.VIRTUAL) {
+            balance.increaseAvailable(expectedReturn);
+        } else {
+            balance.increaseUnsettled(expectedReturn);
+        }
 
         Trade trade = Trade.builder()
                 .order(order)
@@ -221,6 +232,20 @@ public class LimitOrderMatchingService {
                 .settlementDate(settlementDate)
                 .build();
         trade = tradeRepository.save(trade);
+
+        // 주식/ETF 매도: Settlement 레코드 생성 (정산 스케줄러 트리거용)
+        if (asset.getAssetClass() != AssetClass.CRYPTO && asset.getAssetClass() != AssetClass.VIRTUAL) {
+            Settlement settlement = Settlement.builder()
+                    .trade(trade)
+                    .user(order.getUser())
+                    .currency(order.getCurrency())
+                    .amount(expectedReturn)
+                    .settlementDate(settlementDate)
+                    .status(Settlement.SettlementStatus.PENDING)
+                    .priceMode(mode)
+                    .build();
+            settlementRepository.save(settlement);
+        }
 
         eventPublisher.publishEvent(new TradeEvent(
                 trade.getId(),

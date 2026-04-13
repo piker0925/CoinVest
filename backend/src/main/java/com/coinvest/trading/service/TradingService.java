@@ -35,6 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import com.coinvest.trading.domain.OrderStatus;
+import com.coinvest.trading.domain.OrderSide;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -240,7 +243,9 @@ public class TradingService {
         BigDecimal totalAmount = currentPrice.multiply(order.getQuantity());
         BigDecimal fee = totalAmount.multiply(asset.getFeeRate());
         BigDecimal realizedPnl = BigDecimal.ZERO;
-        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, LocalDate.now());
+        // KST 기준 체결일 사용: UTC 서버 환경에서 LocalDate.now()는 자정 경계 오류를 유발함
+        LocalDate tradeDate = order.getCreatedAt().atZone(ZoneId.of("Asia/Seoul")).toLocalDate();
+        LocalDate settlementDate = marketHoursService.calculateSettlementDate(asset, tradeDate);
 
         if (order.getSide() == OrderSide.BUY) {
             BigDecimal actualRequired = totalAmount.add(fee);
@@ -320,11 +325,90 @@ public class TradingService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_BALANCE_NOT_FOUND));
     }
 
-    @Transactional
-    public void resetAccount(Long userId) {
-    }
+    private static final BigDecimal INITIAL_KRW = new BigDecimal("100000000"); // 1억
+    private static final BigDecimal INITIAL_USD = new BigDecimal("10000");     // 1만
 
+    /**
+     * 지정가 주문 취소.
+     * BUY: 잠긴 잔고 해제 / SELL: 잠긴 수량 해제 / Redis ZSet에서 제거.
+     */
     @Transactional
     public void cancelOrder(Long userId, Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_ORDER_NOT_FOUND));
+
+        if (!order.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.TRADING_ORDER_NOT_FOUND); // IDOR 마스킹
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.TRADING_ORDER_NOT_CANCELABLE);
+        }
+
+        order.cancel();
+
+        if (order.getSide() == OrderSide.BUY) {
+            VirtualAccount account = virtualAccountRepository.findByUserId(userId).orElseThrow();
+            Balance balance = balanceRepository
+                    .findByAccountIdAndCurrencyWithLock(account.getId(), order.getCurrency())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_BALANCE_NOT_FOUND));
+            Asset asset = assetRepository.findByUniversalCode(order.getUniversalCode())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_ASSET_NOT_FOUND));
+            // 잠금 시와 동일한 수식 사용 (formatKrw 없음 — 소수점 오차 방지)
+            BigDecimal totalAmount = order.getPrice().multiply(order.getQuantity());
+            BigDecimal fee = totalAmount.multiply(asset.getFeeRate());
+            balance.unlock(totalAmount.add(fee));
+        } else {
+            TradingStrategy strategy = strategyResolver.resolve(order.getPriceMode());
+            Position position = strategy.getPosition(userId, order.getUniversalCode())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.TRADING_INSUFFICIENT_QUANTITY));
+            position.unlockQuantity(order.getQuantity());
+        }
+
+        // Redis 지정가 대기열에서 제거
+        String side = order.getSide() == OrderSide.BUY ? "buy" : "sell";
+        String key = RedisKeyConstants.getLimitOrderKey(order.getPriceMode(), side, order.getUniversalCode());
+        redisTemplate.opsForZSet().remove(key, orderId.toString());
+    }
+
+    /**
+     * DEMO 계좌 초기화.
+     * 잔고 계산 없이 Brute-force로 상태를 초기값으로 되돌림.
+     * 미체결 주문은 Redis 대기열에서 제거 후 CANCELLED 처리.
+     * 개별 잠금 해제 루프를 피해 데드락 위험 없음.
+     */
+    @Transactional
+    public void resetAccount(Long userId) {
+        // 1. DEMO 미체결 주문 → Redis 대기열 제거 (잔고 계산 없이 상태만 변경)
+        List<Order> pendingOrders = orderRepository.findByUserIdAndStatus(userId, OrderStatus.PENDING)
+                .stream()
+                .filter(o -> o.getPriceMode() == PriceMode.DEMO)
+                .toList();
+
+        for (Order order : pendingOrders) {
+            String side = order.getSide() == OrderSide.BUY ? "buy" : "sell";
+            String key = RedisKeyConstants.getLimitOrderKey(order.getPriceMode(), side, order.getUniversalCode());
+            redisTemplate.opsForZSet().remove(key, order.getId().toString());
+        }
+
+        // 2. 고아 레코드 삭제: FK 의존 순서 준수 (Settlement → Trade → Order)
+        settlementRepository.deleteAllByUserIdAndPriceMode(userId, PriceMode.DEMO);
+        tradeRepository.deleteAllByUserIdAndPriceMode(userId, PriceMode.DEMO);
+        orderRepository.deleteAllByUserIdAndPriceMode(userId, PriceMode.DEMO);
+
+        // 3. DEMO 포지션 전부 삭제
+        positionRepository.deleteAllByUserIdAndPriceMode(userId, PriceMode.DEMO);
+
+        // 4. 잔고 초기화 (어차피 덮어씌우므로 개별 unlock 계산 불필요)
+        VirtualAccount account = virtualAccountRepository.findByUserId(userId).orElseThrow();
+        List<Balance> balances = balanceRepository.findAllByAccountId(account.getId());
+        for (Balance balance : balances) {
+            if (balance.getCurrency() == Currency.KRW) {
+                balance.resetTo(INITIAL_KRW);
+            } else if (balance.getCurrency() == Currency.USD) {
+                balance.resetTo(INITIAL_USD);
+            }
+        }
+
+        log.info("DEMO account reset for userId={}", userId);
     }
 }

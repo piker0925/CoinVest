@@ -123,4 +123,14 @@ public class Balance extends BaseEntity {
         }
         this.unsettled = this.unsettled.subtract(amount);
     }
+
+    /**
+     * 계좌 초기화 전용: 잔고 전체를 지정 금액으로 덮어씌움.
+     * resetAccount()에서만 사용. 개별 주문 취소 경로에서는 사용 금지.
+     */
+    public void resetTo(BigDecimal amount) {
+        this.available = amount;
+        this.locked = BigDecimal.ZERO;
+        this.unsettled = BigDecimal.ZERO;
+    }
 }
