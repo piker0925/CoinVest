@@ -10,6 +10,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.script.RedisScript;
+
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,6 +35,14 @@ public class SimulatedBenchmark {
     private final RedisTemplate<String, Object> redisTemplate;
     private final MarketHoursService marketHoursService;
     private final Random random = new Random();
+
+    // remove(score) + add(score, member)를 원자적으로 수행 — 읽기 스레드가 공백 구간을 볼 수 없도록 보장
+    private static final RedisScript<Long> UPSERT_SCORE_SCRIPT = RedisScript.of(
+            "local score = tonumber(ARGV[1])\n" +
+            "redis.call('ZREMRANGEBYSCORE', KEYS[1], score, score)\n" +
+            "return redis.call('ZADD', KEYS[1], score, ARGV[2])",
+            Long.class
+    );
 
     // 지수별 현재가 관리
     private final Map<String, BigDecimal> currentPrices = new ConcurrentHashMap<>();
@@ -72,10 +82,11 @@ public class SimulatedBenchmark {
             String priceKey = RedisKeyConstants.getBenchmarkKey(PriceMode.DEMO, spec.code());
             redisTemplate.opsForValue().set(priceKey, nextPrice.toString(), Duration.ofMinutes(5));
 
-            // 2. 이력 저장 (ZSet, score = epochDay): 동일 날짜 UPSERT
+            // 2. 이력 저장 (ZSet, score = epochDay): 원자적 UPSERT — remove+add 사이 공백 없음
             String historyKey = RedisKeyConstants.getBenchmarkHistoryKey(PriceMode.DEMO, spec.code());
-            redisTemplate.opsForZSet().removeRangeByScore(historyKey, today, today);
-            redisTemplate.opsForZSet().add(historyKey, nextPrice.toString(), today);
+            redisTemplate.execute(UPSERT_SCORE_SCRIPT,
+                    List.of(historyKey),
+                    String.valueOf(today), nextPrice.toString());
 
             long ninetyDaysAgo = today - 90;
             redisTemplate.opsForZSet().removeRangeByScore(historyKey, 0, ninetyDaysAgo - 1);

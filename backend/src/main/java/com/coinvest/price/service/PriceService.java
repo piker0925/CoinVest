@@ -11,6 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
+
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -97,15 +100,31 @@ public class PriceService {
         String windowKey = RedisKeyConstants.getPriceWindowKey(mode, universalCode);
         String slotKey = RedisKeyConstants.getPriceWindowSlotKey(mode, universalCode);
 
-        List<Object> rawPrices = redisTemplate.opsForList().range(windowKey, 0, -1);
-        Object currentSlotObj = redisTemplate.opsForValue().get(slotKey);
+        // 두 키를 단일 왕복으로 조회 (5초 폴링마다 호출되므로 RTT 절감)
+        List<Object> pipelineResults = redisTemplate.executePipelined(new SessionCallback<>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <K, V> Object execute(RedisOperations<K, V> operations) {
+                RedisOperations<String, Object> ops = (RedisOperations<String, Object>) operations;
+                ops.opsForList().range(windowKey, 0, -1);
+                ops.opsForValue().get(slotKey);
+                return null;
+            }
+        });
 
-        if (rawPrices == null || rawPrices.isEmpty() || currentSlotObj == null) {
+        Object firstResult = pipelineResults.size() > 0 ? pipelineResults.get(0) : null;
+        Object secondResult = pipelineResults.size() > 1 ? pipelineResults.get(1) : null;
+
+        List<?> rawPrices = firstResult instanceof List ? (List<?>) firstResult : Collections.emptyList();
+        Object currentSlotObj = secondResult;
+
+        if (rawPrices.isEmpty() || currentSlotObj == null) {
             return List.of();
         }
 
         long currentSlot = Long.parseLong(currentSlotObj.toString());
-        long candleIntervalSec = 5 * 60L; // 5분 = 300초
+        // 슬롯 인덱스(5분 단위 정수) × 변환 인수 = 유닉스 초(epoch seconds)
+        long slotToEpochSecFactor = 5 * 60L;
 
         int size = rawPrices.size();
         List<CandleData> candles = new ArrayList<>(size);
@@ -114,7 +133,7 @@ public class PriceService {
         // 오래된 것부터 순서대로 생성 (lightweight-charts는 시간 오름차순 필요)
         for (int i = size - 1; i >= 0; i--) {
             double close = Double.parseDouble(rawPrices.get(i).toString());
-            long time = (currentSlot - i) * candleIntervalSec;
+            long time = (currentSlot - i) * slotToEpochSecFactor;
 
             // open = 이전 슬롯의 close (없으면 현재 close)
             double open = (i < size - 1)

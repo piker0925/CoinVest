@@ -41,7 +41,11 @@ public class PriceController {
 
         BigDecimal currentPrice = priceService.getCurrentPrice(universalCode, mode);
         if (currentPrice.compareTo(BigDecimal.ZERO) == 0) {
-            currentPrice = new BigDecimal("98200000");
+            return ApiResponse.success(OrderbookResponse.builder()
+                    .universalCode(universalCode)
+                    .sells(List.of())
+                    .buys(List.of())
+                    .build());
         }
 
         // 현재가의 마지막 4자리를 시드로 사용: 가격이 변할 때만 호가 변화, 폴링마다 랜덤하게 깜빡이지 않음
