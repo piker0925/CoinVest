@@ -9,8 +9,8 @@ CLAUDE.md
 
 # Java/Gradle
 target/
-build/
-out/
+**/build/
+**/out/
 *.class
 *.jar
 *.war
@@ -18,7 +18,7 @@ out/
 *.zip
 *.tar.gz
 
-.gradle/
+**/.gradle/
 !gradle-wrapper.jar
 .gradletasknamecache
 
@@ -44,11 +44,14 @@ logs/
 
 # Node (프론트엔드)
 node_modules/
+**/node_modules/
 dist/
-.next/
+**/.next/
+**/.turbo/
 .vercel
 out/
 build/
+*.tsbuildinfo
 npm-debug.log*
 yarn-error.log*
 yarn-debug.log*

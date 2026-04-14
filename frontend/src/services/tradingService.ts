@@ -28,8 +28,10 @@ export interface AccountResponse {
 export interface PositionResponse {
     id: number;
     universalCode: string;
+    currency: 'KRW' | 'USD';
     avgBuyPrice: number;
     quantity: number;
+    lockedQuantity: number;
     availableQuantity: number;
     realizedPnl: number;
     currentPrice: number;

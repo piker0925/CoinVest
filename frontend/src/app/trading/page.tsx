@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
+import React, {useState} from 'react';
 import {ArrowRightLeft, Clock, Search} from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {ScrollArea} from '@/components/ui/scroll-area';
@@ -26,14 +26,8 @@ export default function TradingPage() {
         refetchInterval: false,
     });
 
-    useEffect(() => {
-        if (assets.length > 0 && currentSymbol === null) {
-            setCurrentSymbol(assets[0].universalCode);
-        }
-    }, [assets, currentSymbol]);
-
-    const selectedAsset = assets.find((a) => a.universalCode === currentSymbol) ?? assets[0] ?? null;
-    const activeSymbol = selectedAsset?.universalCode ?? '';
+    const activeSymbol = currentSymbol ?? assets[0]?.universalCode ?? '';
+    const selectedAsset = assets.find((a) => a.universalCode === activeSymbol) ?? null;
 
     const filteredAssets = assets.filter(
         (a) =>

@@ -3,11 +3,12 @@
 import React from 'react';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {TrendingUp} from 'lucide-react';
+import {OrderbookUnit} from '@/services/tradingService';
 
 interface OrderbookProps {
     data?: {
-        sells: any[];
-        buys: any[];
+        sells: OrderbookUnit[];
+        buys: OrderbookUnit[];
     };
     currentPrice?: number;
 }

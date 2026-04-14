@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
+import React, {useEffect} from 'react';
 import {useRouter} from 'next/navigation';
 import {useAuthStore} from '@/store/useAuthStore';
 import {Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,} from 'recharts';
@@ -30,14 +30,12 @@ function toChartPoint(m: SystemMetric) {
 export default function AdminPage() {
     const router = useRouter();
     const {user} = useAuthStore();
-    const [isAuthorized, setIsAuthorized] = useState(false);
+    const isAuthorized = user?.role === 'ROLE_ADMIN';
 
     useEffect(() => {
         if (!user || user.role !== 'ROLE_ADMIN') {
             toast.error('접근 권한이 없습니다. (ROLE_ADMIN 전용)');
             router.push('/dashboard');
-        } else {
-            setIsAuthorized(true);
         }
     }, [user, router]);
 

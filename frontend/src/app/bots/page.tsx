@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
+import React, {useState} from 'react';
 import {BarChart3, Cpu, Info, Zap} from 'lucide-react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
@@ -33,18 +33,13 @@ export default function BotsPage() {
         staleTime: 30_000,
     });
 
-    useEffect(() => {
-        if (bots.length > 0 && selectedBotId === null) {
-            setSelectedBotId(bots[0].id);
-        }
-    }, [bots, selectedBotId]);
-
-    const selectedBot = bots.find((b) => b.id === selectedBotId) ?? bots[0] ?? null;
+    const effectiveBotId = selectedBotId ?? bots[0]?.id ?? null;
+    const selectedBot = bots.find((b) => b.id === effectiveBotId) ?? null;
 
     const {data: report, isLoading: isReportLoading} = useQuery({
-        queryKey: ['bot-report', selectedBotId],
-        queryFn: () => botService.getReport(selectedBotId!, 'ALL'),
-        enabled: selectedBotId != null,
+        queryKey: ['bot-report', effectiveBotId],
+        queryFn: () => botService.getReport(effectiveBotId!, 'ALL'),
+        enabled: effectiveBotId != null,
         staleTime: 30_000,
     });
 
