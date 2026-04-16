@@ -3,6 +3,7 @@ package com.coinvest.portfolio.service;
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
+import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
@@ -47,6 +48,9 @@ class PortfolioServiceTest {
     private AssetRepository assetRepository;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private User user;
@@ -67,6 +71,7 @@ class PortfolioServiceTest {
         Asset btc = Asset.builder().universalCode("CRYPTO:BTC").quoteCurrency(Currency.KRW).build();
         Asset eth = Asset.builder().universalCode("CRYPTO:ETH").quoteCurrency(Currency.KRW).build();
 
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(portfolioRepository.countByUser(user)).willReturn(0L);
         given(assetRepository.findByUniversalCode("CRYPTO:BTC")).willReturn(Optional.of(btc));
         given(assetRepository.findByUniversalCode("CRYPTO:ETH")).willReturn(Optional.of(eth));
@@ -77,7 +82,7 @@ class PortfolioServiceTest {
         });
 
         // when
-        PortfolioResponse response = portfolioService.createPortfolio(user, request);
+        PortfolioResponse response = portfolioService.createPortfolio(1L, request);
 
         // then
         assertThat(response.getName()).isEqualTo("My Portfolio");
@@ -93,10 +98,11 @@ class PortfolioServiceTest {
         PortfolioCreateRequest.AssetRequest asset2 = new PortfolioCreateRequest.AssetRequest("CRYPTO:ETH", new BigDecimal("0.2")); // 합 0.9
         PortfolioCreateRequest request = new PortfolioCreateRequest("Invalid Portfolio", new BigDecimal("1000000"), Currency.KRW, Arrays.asList(asset1, asset2));
 
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(portfolioRepository.countByUser(user)).willReturn(0L);
 
         // when & then
-        assertThatThrownBy(() -> portfolioService.createPortfolio(user, request))
+        assertThatThrownBy(() -> portfolioService.createPortfolio(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(ErrorCode.PORTFOLIO_INVALID_WEIGHT.getMessage());
     }
@@ -110,7 +116,7 @@ class PortfolioServiceTest {
         given(portfolioRepository.findById(100L)).willReturn(Optional.of(portfolio));
 
         // when & then
-        assertThatThrownBy(() -> portfolioService.getPortfolio(100L, user))
+        assertThatThrownBy(() -> portfolioService.getPortfolio(100L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(ErrorCode.PORTFOLIO_NOT_FOUND.getMessage());
     }

@@ -80,7 +80,7 @@ class RebalancingServiceTest {
                 .willReturn(new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false));
 
         // when
-        List<RebalancingProposal> proposals = rebalancingService.simulateRebalancing(portfolioId);
+        List<RebalancingProposal> proposals = rebalancingService.simulateRebalancing(portfolioId, user.getId());
 
         // then
         RebalancingProposal btcProposal = proposals.get(0);
@@ -122,7 +122,7 @@ class RebalancingServiceTest {
                 .willReturn(new ExchangeRateService.ExchangeRateResponse(BigDecimal.ONE, false));
 
         // when
-        List<RebalancingProposal> proposals = rebalancingService.simulateRebalancing(portfolioId);
+        List<RebalancingProposal> proposals = rebalancingService.simulateRebalancing(portfolioId, user.getId());
 
         // then
         assertThat(proposals.get(0).getAction()).isEqualTo(RebalancingProposal.Action.HOLD);

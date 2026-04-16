@@ -67,6 +67,8 @@ services:
   db:
     image: postgres:16-alpine
     container_name: coinvest-db
+    ports:
+      - "5432:5432"
     deploy:
       resources:
         limits:
@@ -90,6 +92,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: coinvest-redis
+    ports:
+      - "6379:6379"
     deploy:
       resources:
         limits:

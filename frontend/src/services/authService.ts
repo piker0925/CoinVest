@@ -13,6 +13,10 @@ export const authService = {
         return response.data.data;
     },
 
+    async signup(email: string, password: string, nickname: string): Promise<void> {
+        await apiClient.post('/auth/signup', {email, password, nickname});
+    },
+
     async logout(): Promise<void> {
         await apiClient.post('/auth/logout');
     },

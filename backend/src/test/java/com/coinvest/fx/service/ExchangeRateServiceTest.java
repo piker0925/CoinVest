@@ -4,6 +4,7 @@ import com.coinvest.fx.domain.Currency;
 import com.coinvest.fx.domain.ExchangeRate;
 import com.coinvest.fx.repository.ExchangeRateRepository;
 import com.coinvest.global.common.PriceMode;
+import com.coinvest.portfolio.repository.AlertHistoryRepository;
 import com.coinvest.global.exception.CircuitBreakerException;
 import com.coinvest.portfolio.service.DiscordClient;
 import com.coinvest.price.service.KisApiManager;
@@ -42,6 +43,9 @@ class ExchangeRateServiceTest {
 
     @Mock
     private ObjectMapper objectMapper;
+
+    @Mock
+    private AlertHistoryRepository alertHistoryRepository;
 
     @Mock
     private KisApiManager kisApiManager;
@@ -87,7 +91,7 @@ class ExchangeRateServiceTest {
                 .baseCurrency(Currency.USD)
                 .quoteCurrency(Currency.KRW)
                 .rate(new BigDecimal("1350.00"))
-                .fetchedAt(LocalDateTime.now().minusHours(49))
+                .fetchedAt(LocalDateTime.now().minusHours(81))
                 .build();
 
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
@@ -110,7 +114,7 @@ class ExchangeRateServiceTest {
                 .baseCurrency(Currency.USD)
                 .quoteCurrency(Currency.KRW)
                 .rate(new BigDecimal("1350.00"))
-                .fetchedAt(LocalDateTime.now().minusHours(49))
+                .fetchedAt(LocalDateTime.now().minusHours(81))
                 .build();
 
         given(redisTemplate.opsForValue()).willReturn(valueOperations);

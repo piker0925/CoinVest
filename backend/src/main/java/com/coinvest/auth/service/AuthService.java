@@ -27,6 +27,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenService tokenService;
     private final LoginFailureService loginFailureService;
+    private final com.coinvest.trading.service.AccountService accountService;
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
@@ -44,9 +45,14 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .nickname(request.getNickname())
+                .role(UserRole.USER)
                 .build();
 
         User savedUser = userRepository.save(user);
+
+        // 신규 유저 가상 계좌 및 초기 자금 생성
+        accountService.createDefaultAccount(savedUser.getId());
+
         return UserResponse.from(savedUser);
     }
 

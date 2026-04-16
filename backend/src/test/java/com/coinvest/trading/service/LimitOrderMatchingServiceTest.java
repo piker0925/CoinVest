@@ -4,6 +4,7 @@ import com.coinvest.auth.domain.User;
 import com.coinvest.auth.domain.UserRole;
 import com.coinvest.fx.domain.Currency;
 import com.coinvest.global.common.PriceMode;
+import com.coinvest.trading.service.LimitOrderExecutor;
 import com.coinvest.trading.domain.*;
 import com.coinvest.trading.repository.OrderRepository;
 import com.coinvest.trading.repository.PositionRepository;
@@ -38,7 +39,7 @@ import static org.mockito.Mockito.*;
 class LimitOrderMatchingServiceTest {
 
     @InjectMocks
-    private LimitOrderMatchingService matchingService;
+    private LimitOrderExecutor limitOrderExecutor;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
@@ -134,7 +135,7 @@ class LimitOrderMatchingServiceTest {
                 .quoteCurrency(Currency.KRW)
                 .feeRate(new BigDecimal("0.0005"))
                 .build();
-        matchingService.executeBuyOrderInTransaction(orderId, currentPrice, LocalDate.now(), asset);
+        limitOrderExecutor.executeBuy(orderId, currentPrice, LocalDate.now(), asset);
 
         // then
         assertThat(krwBalance.getAvailable().compareTo(new BigDecimal("10000000"))).isEqualTo(0);
@@ -182,7 +183,7 @@ class LimitOrderMatchingServiceTest {
                 .quoteCurrency(Currency.KRW)
                 .feeRate(new BigDecimal("0.0005"))
                 .build();
-        matchingService.executeSellOrderInTransaction(orderId, currentPrice, LocalDate.now(), asset);
+        limitOrderExecutor.executeSell(orderId, currentPrice, LocalDate.now(), asset);
 
         // then
         BigDecimal expectedReturn = new BigDecimal("9995000");
