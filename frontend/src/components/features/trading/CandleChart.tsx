@@ -1,7 +1,7 @@
 'use client';
 
 import React, {useEffect, useRef} from 'react';
-import {CandlestickData, ColorType, createChart, IChartApi, ISeriesApi, Time} from 'lightweight-charts';
+import {CandlestickData, CandlestickSeries, ColorType, createChart, IChartApi, ISeriesApi, Time} from 'lightweight-charts';
 import {useQuery} from '@tanstack/react-query';
 import {tradingService} from '@/services/tradingService';
 import {PriceMode} from '@/store/useAuthStore';
@@ -49,8 +49,7 @@ export const CandleChart = ({universalCode, mode, tickerPrice}: CandleChartProps
             rightPriceScale: {borderColor: '#1e293b'},
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const candleSeries = (chart as any).addCandlestickSeries({
+        const candleSeries = chart.addSeries(CandlestickSeries, {
             upColor: '#ef4444',
             downColor: '#3b82f6',
             borderVisible: false,

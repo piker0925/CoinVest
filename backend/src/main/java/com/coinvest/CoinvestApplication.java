@@ -2,6 +2,7 @@ package com.coinvest;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * CoinVest: 암호화폐 포트폴리오 리밸런싱 엔진
@@ -21,6 +22,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * - Virtual Thread Pinning 모니터링: 활성화
  */
 @SpringBootApplication
+@EnableScheduling
 public class CoinvestApplication {
 
 	public static void main(String[] args) {

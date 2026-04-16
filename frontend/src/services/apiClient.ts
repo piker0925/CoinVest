@@ -55,6 +55,15 @@ apiClient.interceptors.response.use(
             return Promise.reject(error);
         }
 
+        // 인증 엔드포인트(login, signup)의 401은 자격증명 오류이므로 reissue 불필요
+        // — 이 경우 caller(login page)가 직접 에러를 처리해야 함
+        if (
+            originalRequest.url?.includes('/auth/login') ||
+            originalRequest.url?.includes('/auth/signup')
+        ) {
+            return Promise.reject(error);
+        }
+
         // reissue 자체가 실패한 경우 무한 루프 방지
         if (originalRequest.url?.includes('/auth/reissue')) {
             if (typeof window !== 'undefined') {
