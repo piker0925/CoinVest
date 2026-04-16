@@ -1,5 +1,6 @@
 package com.coinvest.trading.repository;
 
+import com.coinvest.global.common.PriceMode;
 import com.coinvest.trading.domain.StopLossOrder;
 import com.coinvest.trading.domain.StopLossTakeProfitStatus;
 import jakarta.persistence.LockModeType;
@@ -16,7 +17,10 @@ public interface StopLossOrderRepository extends JpaRepository<StopLossOrder, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT slo FROM StopLossOrder slo JOIN FETCH slo.position p " +
            "WHERE p.universalCode = :universalCode " +
+           "AND p.priceMode = :mode " +
            "AND slo.status = 'ACTIVE' " +
            "AND slo.triggerPrice >= :currentPrice")
-    List<StopLossOrder> findAllActiveTriggered(@Param("universalCode") String universalCode, @Param("currentPrice") BigDecimal currentPrice);
+    List<StopLossOrder> findAllActiveTriggered(@Param("universalCode") String universalCode,
+                                               @Param("currentPrice") BigDecimal currentPrice,
+                                               @Param("mode") PriceMode mode);
 }

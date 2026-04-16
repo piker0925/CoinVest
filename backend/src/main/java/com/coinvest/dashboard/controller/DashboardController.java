@@ -1,6 +1,5 @@
 package com.coinvest.dashboard.controller;
 
-import com.coinvest.auth.domain.User;
 import com.coinvest.dashboard.dto.BenchmarkComparison;
 import com.coinvest.dashboard.dto.Period;
 import com.coinvest.dashboard.dto.PerformanceResponse;
@@ -49,11 +48,11 @@ public class DashboardController {
     public ApiResponse<PerformanceResponse> getPerformance(
             @RequestParam Long portfolioId,
             @RequestParam(defaultValue = "1M") String period,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal Long userId) {
 
         Period parsedPeriod = parsePeriod(period);
         PerformanceResponse response = benchmarkService.getMyPerformance(
-            portfolioId, user.getId(), parsedPeriod
+            portfolioId, userId, parsedPeriod
         );
         return ApiResponse.success(response);
     }
@@ -69,11 +68,11 @@ public class DashboardController {
     public ApiResponse<BenchmarkComparison> getBenchmarkComparison(
             @RequestParam Long portfolioId,
             @RequestParam(defaultValue = "1M") String period,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal Long userId) {
 
         Period parsedPeriod = parsePeriod(period);
         BenchmarkComparison response = benchmarkService.compareBenchmarks(
-            portfolioId, user.getId(), parsedPeriod
+            portfolioId, userId, parsedPeriod
         );
         return ApiResponse.success(response);
     }

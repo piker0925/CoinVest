@@ -1,9 +1,5 @@
 package com.coinvest.trading.controller;
 
-import com.coinvest.auth.domain.User;
-import com.coinvest.auth.domain.UserRepository;
-import com.coinvest.global.exception.BusinessException;
-import com.coinvest.global.exception.ErrorCode;
 import com.coinvest.trading.service.SseEmitters;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -22,25 +18,22 @@ import java.io.IOException;
 public class NotificationController {
 
     private final SseEmitters sseEmitters;
-    private final UserRepository userRepository;
 
     // 타임아웃을 무제한(또는 충분히 길게, 여기선 1시간) 설정
     private static final Long SSE_TIMEOUT = 3600000L;
 
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<SseEmitter> subscribe(@AuthenticationPrincipal String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        
+    public ResponseEntity<SseEmitter> subscribe(@AuthenticationPrincipal Long userId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
-        sseEmitters.add(user.getId(), emitter);
+        sseEmitters.add(userId, emitter);
 
         try {
             // 연결 즉시 더미 이벤트를 보내주어 클라이언트에게 연결되었음을 알림
             emitter.send(SseEmitter.event()
                     .name("connect")
-                    .data("Connected to Notification Service [User " + user.getId() + "]"));
+                    .data("Connected to Notification Service [User " + userId + "]"));
         } catch (IOException e) {
-            sseEmitters.remove(user.getId());
+            sseEmitters.remove(userId);
         }
 
         return ResponseEntity.ok(emitter);

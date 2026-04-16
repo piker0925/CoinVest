@@ -1,6 +1,5 @@
 package com.coinvest.portfolio.controller;
 
-import com.coinvest.auth.domain.User;
 import com.coinvest.global.common.ApiResponse;
 import com.coinvest.global.common.CursorPageResponse;
 import com.coinvest.portfolio.dto.AlertHistoryResponse;
@@ -28,8 +27,8 @@ public class AlertController {
     @GetMapping("/settings")
     public ApiResponse<AlertSettingResponse> getAlertSetting(
             @PathVariable Long portfolioId,
-            @AuthenticationPrincipal User user) {
-        return ApiResponse.success(alertService.getAlertSetting(portfolioId, user));
+            @AuthenticationPrincipal Long userId) {
+        return ApiResponse.success(alertService.getAlertSetting(portfolioId, userId));
     }
 
     /**
@@ -38,9 +37,9 @@ public class AlertController {
     @PutMapping("/settings")
     public ApiResponse<AlertSettingResponse> updateAlertSetting(
             @PathVariable Long portfolioId,
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal Long userId,
             @RequestBody @Valid AlertSettingUpdateRequest request) {
-        return ApiResponse.success(alertService.updateAlertSetting(portfolioId, user, request));
+        return ApiResponse.success(alertService.updateAlertSetting(portfolioId, userId, request));
     }
 
     /**
@@ -49,8 +48,8 @@ public class AlertController {
     @DeleteMapping("/settings")
     public ApiResponse<Void> resetAlertSetting(
             @PathVariable Long portfolioId,
-            @AuthenticationPrincipal User user) {
-        alertService.resetAlertSetting(portfolioId, user);
+            @AuthenticationPrincipal Long userId) {
+        alertService.resetAlertSetting(portfolioId, userId);
         return ApiResponse.success(null);
     }
 
@@ -60,9 +59,9 @@ public class AlertController {
     @GetMapping("/histories")
     public ApiResponse<CursorPageResponse<AlertHistoryResponse>> getAlertHistories(
             @PathVariable Long portfolioId,
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) Long cursorId,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(alertService.getAlertHistories(portfolioId, user, cursorId, size));
+        return ApiResponse.success(alertService.getAlertHistories(portfolioId, userId, cursorId, size));
     }
 }

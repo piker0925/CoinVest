@@ -85,8 +85,8 @@ public class PriceEventHandler implements MessageListener {
             // 1-1. 봇 전략 지표 계산용 가격 윈도우 갱신 (Time Bucketing)
             appendToPriceWindow(universalCode, event.getTradePrice(), event.getTradeTimestamp(), mode);
 
-            // 2. 내부 리스너들을 위한 가격 업데이트 이벤트 발행
-            eventPublisher.publishEvent(new TickerUpdatedEvent(event));
+            // 2. 내부 리스너들을 위한 가격 업데이트 이벤트 발행 (mode 포함하여 Demo/Live 격리 보장)
+            eventPublisher.publishEvent(new TickerUpdatedEvent(event, mode));
 
             // 3. 지정가 주문 매칭 시도
             try {

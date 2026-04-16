@@ -33,20 +33,19 @@ public class StopLossTakeProfitMatcher {
     public void onTickerUpdated(TickerUpdatedEvent event) {
         String universalCode = event.ticker().getUniversalCode();
         BigDecimal currentPrice = event.ticker().getTradePrice();
+        PriceMode mode = event.mode();
 
-        matchStopLoss(universalCode, currentPrice);
-        matchTakeProfit(universalCode, currentPrice);
+        matchStopLoss(universalCode, currentPrice, mode);
+        matchTakeProfit(universalCode, currentPrice, mode);
     }
 
     @Transactional
-    public void matchStopLoss(String universalCode, BigDecimal currentPrice) {
-        List<StopLossOrder> triggeredOrders = stopLossOrderRepository.findAllActiveTriggered(universalCode, currentPrice);
+    public void matchStopLoss(String universalCode, BigDecimal currentPrice, PriceMode mode) {
+        List<StopLossOrder> triggeredOrders = stopLossOrderRepository.findAllActiveTriggered(universalCode, currentPrice, mode);
         
         for (StopLossOrder order : triggeredOrders) {
             try {
                 order.process();
-                // 포지션의 priceMode를 참조하여 주문 (Position 엔티티에 priceMode 필드가 있다고 가정)
-                PriceMode mode = order.getPosition().getPriceMode();
                 executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity(), mode);
                 order.execute();
                 log.info("Stop-Loss Executed: [User={}, Asset={}, Price={}, Mode={}]", 
@@ -59,13 +58,12 @@ public class StopLossTakeProfitMatcher {
     }
 
     @Transactional
-    public void matchTakeProfit(String universalCode, BigDecimal currentPrice) {
-        List<TakeProfitOrder> triggeredOrders = takeProfitOrderRepository.findAllActiveTriggered(universalCode, currentPrice);
+    public void matchTakeProfit(String universalCode, BigDecimal currentPrice, PriceMode mode) {
+        List<TakeProfitOrder> triggeredOrders = takeProfitOrderRepository.findAllActiveTriggered(universalCode, currentPrice, mode);
 
         for (TakeProfitOrder order : triggeredOrders) {
             try {
                 order.process();
-                PriceMode mode = order.getPosition().getPriceMode();
                 executeAutoSell(order.getUser().getId(), universalCode, order.getQuantity(), mode);
                 order.execute();
                 log.info("Take-Profit Executed: [User={}, Asset={}, Price={}, Mode={}]", 

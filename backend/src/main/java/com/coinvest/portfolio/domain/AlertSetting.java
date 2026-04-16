@@ -25,6 +25,7 @@ public class AlertSetting extends BaseEntity {
     @JoinColumn(name = "portfolio_id", nullable = false, unique = true)
     private Portfolio portfolio;
 
+    @Convert(converter = WebhookUrlConverter.class)
     @Column(name = "discord_webhook_url", columnDefinition = "TEXT")
     private String discordWebhookUrl;
 

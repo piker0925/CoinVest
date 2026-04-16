@@ -6,11 +6,13 @@ import com.coinvest.trading.domain.MarketCalendar.Exchange;
 import com.coinvest.trading.repository.MarketCalendarRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.*;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -18,6 +20,16 @@ import java.util.Map;
 public class MarketHoursService {
 
     private final MarketCalendarRepository calendarRepository;
+
+    // 공휴일 조회 캐시 (Exchange:date → isHoliday). 매일 자정 초기화.
+    // 동일 날짜에 수백~수천 회 호출되는 isBusinessDay의 DB 쿼리 부하를 제거하기 위함.
+    private final ConcurrentHashMap<String, Boolean> holidayCache = new ConcurrentHashMap<>();
+
+    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
+    public void clearHolidayCache() {
+        holidayCache.clear();
+        log.debug("Holiday cache cleared");
+    }
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final ZoneId ET = ZoneId.of("America/New_York");
@@ -44,8 +56,8 @@ public class MarketHoursService {
             return false;
         }
 
-        // 2. 휴장일 체크 (DB 조회)
-        if (calendarRepository.existsByExchangeAndHolidayDate(exchange, now.toLocalDate())) {
+        // 2. 휴장일 체크 (캐시 경유)
+        if (!isBusinessDay(exchange, now.toLocalDate())) {
             return false;
         }
 
@@ -88,7 +100,9 @@ public class MarketHoursService {
         if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
             return false;
         }
-        return !calendarRepository.existsByExchangeAndHolidayDate(exchange, date);
+        String cacheKey = exchange.name() + ":" + date;
+        return !holidayCache.computeIfAbsent(cacheKey,
+                k -> calendarRepository.existsByExchangeAndHolidayDate(exchange, date));
     }
 
     /**

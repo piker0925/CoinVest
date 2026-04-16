@@ -3,6 +3,7 @@ package com.coinvest.portfolio.service;
 import com.coinvest.asset.domain.Asset;
 import com.coinvest.asset.repository.AssetRepository;
 import com.coinvest.auth.domain.User;
+import com.coinvest.auth.domain.UserRepository;
 import com.coinvest.global.common.PriceMode;
 import com.coinvest.global.common.PriceModeResolver;
 import com.coinvest.global.exception.BusinessException;
@@ -36,6 +37,7 @@ public class PortfolioService {
     private final PortfolioRepository portfolioRepository;
     private final AlertSettingRepository alertSettingRepository;
     private final AssetRepository assetRepository;
+    private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final int MAX_PORTFOLIO_COUNT = 5;
@@ -44,7 +46,9 @@ public class PortfolioService {
      * 포트폴리오 생성.
      */
     @Transactional
-    public PortfolioResponse createPortfolio(User user, PortfolioCreateRequest request) {
+    public PortfolioResponse createPortfolio(Long userId, PortfolioCreateRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         // 1. 개수 제한 검증
         if (portfolioRepository.countByUser(user) >= MAX_PORTFOLIO_COUNT) {
             throw new BusinessException(ErrorCode.PORTFOLIO_LIMIT_EXCEEDED);
@@ -97,7 +101,9 @@ public class PortfolioService {
     /**
      * 포트폴리오 목록 조회 (본인 것만).
      */
-    public List<PortfolioResponse> getPortfolios(User user) {
+    public List<PortfolioResponse> getPortfolios(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         return portfolioRepository.findAllByUser(user).stream()
                 .map(PortfolioResponse::from)
                 .collect(Collectors.toList());
@@ -106,8 +112,8 @@ public class PortfolioService {
     /**
      * 포트폴리오 상세 조회.
      */
-    public PortfolioResponse getPortfolio(Long id, User user) {
-        Portfolio portfolio = findByIdAndUser(id, user);
+    public PortfolioResponse getPortfolio(Long id, Long userId) {
+        Portfolio portfolio = findByIdAndUser(id, userId);
         return PortfolioResponse.from(portfolio);
     }
 
@@ -115,8 +121,8 @@ public class PortfolioService {
      * 포트폴리오 수정.
      */
     @Transactional
-    public PortfolioResponse updatePortfolio(Long id, User user, PortfolioUpdateRequest request) {
-        Portfolio portfolio = findByIdAndUser(id, user);
+    public PortfolioResponse updatePortfolio(Long id, Long userId, PortfolioUpdateRequest request) {
+        Portfolio portfolio = findByIdAndUser(id, userId);
 
         // 1. 비중 합 검증
         validateTotalWeight(request.getAssets());
@@ -149,8 +155,8 @@ public class PortfolioService {
      * 포트폴리오 삭제.
      */
     @Transactional
-    public void deletePortfolio(Long id, User user) {
-        Portfolio portfolio = findByIdAndUser(id, user);
+    public void deletePortfolio(Long id, Long userId) {
+        Portfolio portfolio = findByIdAndUser(id, userId);
         portfolioRepository.delete(portfolio);
 
         publishPortfolioEvent(portfolio, PortfolioUpdatedEvent.UpdateType.DELETE);
@@ -159,11 +165,11 @@ public class PortfolioService {
     /**
      * ID와 소유주 기반 포트폴리오 조회 (IDOR 방어).
      */
-    private Portfolio findByIdAndUser(Long id, User user) {
+    private Portfolio findByIdAndUser(Long id, Long userId) {
         Portfolio portfolio = portfolioRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
 
-        if (!portfolio.getUser().getId().equals(user.getId())) {
+        if (!portfolio.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
         return portfolio;

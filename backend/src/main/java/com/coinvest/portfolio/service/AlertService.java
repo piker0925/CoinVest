@@ -1,6 +1,5 @@
 package com.coinvest.portfolio.service;
 
-import com.coinvest.auth.domain.User;
 import com.coinvest.global.common.CursorPageResponse;
 import com.coinvest.global.exception.BusinessException;
 import com.coinvest.global.exception.ErrorCode;
@@ -37,8 +36,8 @@ public class AlertService {
     /**
      * 알림 설정 조회.
      */
-    public AlertSettingResponse getAlertSetting(Long portfolioId, User user) {
-        Portfolio portfolio = validatePortfolioOwnership(portfolioId, user);
+    public AlertSettingResponse getAlertSetting(Long portfolioId, Long userId) {
+        validatePortfolioOwnership(portfolioId, userId);
         AlertSetting setting = alertSettingRepository.findByPortfolioId(portfolioId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALERT_NOT_FOUND));
         return AlertSettingResponse.from(setting);
@@ -48,8 +47,8 @@ public class AlertService {
      * 알림 설정 수정.
      */
     @Transactional
-    public AlertSettingResponse updateAlertSetting(Long portfolioId, User user, AlertSettingUpdateRequest request) {
-        Portfolio portfolio = validatePortfolioOwnership(portfolioId, user);
+    public AlertSettingResponse updateAlertSetting(Long portfolioId, Long userId, AlertSettingUpdateRequest request) {
+        validatePortfolioOwnership(portfolioId, userId);
         AlertSetting setting = alertSettingRepository.findByPortfolioId(portfolioId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALERT_NOT_FOUND));
 
@@ -63,8 +62,8 @@ public class AlertService {
      * 알림 설정 초기화 (비활성화 및 URL 제거).
      */
     @Transactional
-    public void resetAlertSetting(Long portfolioId, User user) {
-        Portfolio portfolio = validatePortfolioOwnership(portfolioId, user);
+    public void resetAlertSetting(Long portfolioId, Long userId) {
+        validatePortfolioOwnership(portfolioId, userId);
         AlertSetting setting = alertSettingRepository.findByPortfolioId(portfolioId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALERT_NOT_FOUND));
 
@@ -75,8 +74,8 @@ public class AlertService {
     /**
      * 알림 이력 조회 (커서 기반 페이징).
      */
-    public CursorPageResponse<AlertHistoryResponse> getAlertHistories(Long portfolioId, User user, Long cursorId, int size) {
-        validatePortfolioOwnership(portfolioId, user);
+    public CursorPageResponse<AlertHistoryResponse> getAlertHistories(Long portfolioId, Long userId, Long cursorId, int size) {
+        validatePortfolioOwnership(portfolioId, userId);
 
         Slice<AlertHistory> slice = alertHistoryRepository.findByPortfolioId(portfolioId, cursorId, PageRequest.of(0, size));
 
@@ -92,14 +91,12 @@ public class AlertService {
     /**
      * 포트폴리오 소유권 검증 (IDOR 방어).
      */
-    private Portfolio validatePortfolioOwnership(Long portfolioId, User user) {
+    private void validatePortfolioOwnership(Long portfolioId, Long userId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
 
-        if (!portfolio.getUser().getId().equals(user.getId())) {
-            // 보안을 위해 타인의 포트폴리오 접근 시 404와 동일하게 처리
+        if (!portfolio.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
         }
-        return portfolio;
     }
 }

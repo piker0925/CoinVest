@@ -51,6 +51,9 @@ public enum ErrorCode {
 	// 400 Bad Request (입력값 오류)
 	COMMON_INVALID_INPUT("입력값이 유효하지 않습니다", HttpStatus.BAD_REQUEST),
 
+	// 404 Not Found (일반)
+	COMMON_NOT_FOUND("요청한 리소스를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+
 	// 500 Internal Server Error (시스템 오류)
 	COMMON_INTERNAL_ERROR("시스템 오류가 발생했습니다", HttpStatus.INTERNAL_SERVER_ERROR);
 

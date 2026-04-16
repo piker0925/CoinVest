@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.NoSuchElementException;
+
 /**
  * 전역 예외 처리.
  * 모든 도메인 예외를 일관된 방식으로 처리하여 클라이언트에게 표준화된 에러 응답을 제공.
@@ -36,6 +38,18 @@ public class GlobalExceptionHandler {
 		return ResponseEntity
 			.status(400)
 			.body(ApiResponse.failure(ErrorCode.COMMON_INVALID_INPUT));
+	}
+
+	/**
+	 * orElseThrow() 미처리로 인한 NoSuchElementException → 404로 변환
+	 * 500 대신 명시적 Not Found를 반환하여 클라이언트 혼란 방지
+	 */
+	@ExceptionHandler(NoSuchElementException.class)
+	public ResponseEntity<?> handleNoSuchElement(NoSuchElementException e) {
+		log.warn("Resource not found: {}", e.getMessage());
+		return ResponseEntity
+			.status(404)
+			.body(ApiResponse.failure(ErrorCode.COMMON_NOT_FOUND));
 	}
 
 	/**

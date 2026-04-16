@@ -95,10 +95,15 @@ public class RebalancingService {
 
     /**
      * 리밸런싱 시뮬레이션 수행.
+     * userId로 소유권 검증 후 시뮬레이션 (IDOR 방어).
      */
-    public List<RebalancingProposal> simulateRebalancing(Long portfolioId) {
+    public List<RebalancingProposal> simulateRebalancing(Long portfolioId, Long userId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND));
+
+        if (!portfolio.getUser().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.PORTFOLIO_NOT_FOUND);
+        }
         
         VirtualAccount account = virtualAccountRepository.findByUserId(portfolio.getUser().getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));

@@ -15,12 +15,6 @@ out/
 .vscode/
 *.iml
 
-# Environment & Logs
-.env
-.env.*.local
-logs/
-*.log
-
 # Node (프론트엔드)
 node_modules/
 dist/

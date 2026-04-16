@@ -25,8 +25,12 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    // 🚀 Spring Boot 3.4.0 관리 버전 사용 (필요 시에만 명시)
+    snippetsDir = file('build/generated-snippets')
+}
+
 dependencies {
-    // ... (existing dependencies)
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -53,14 +57,13 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
-    // Testing
+    // Testing (🚀 순정 상태로 복구)
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.testcontainers:testcontainers'
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
     testImplementation 'com.redis:testcontainers-redis:2.2.3'
-    testImplementation 'com.github.docker-java:docker-java-transport-httpclient5:3.4.0'
     testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
     asciidoctorExtensions 'org.springframework.restdocs:spring-restdocs-asciidoctor'
 
@@ -68,16 +71,15 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
-ext {
-    set('testcontainersVersion', "1.21.0")
-    snippetsDir = file('build/generated-snippets')
-}
-
 test {
     outputs.dir snippetsDir
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+    
+    // 🚀 모든 강제 환경 변수 제거 (순정 탐색 유도)
+    systemProperty "testcontainers.reuse.enable", "true"
 }
+
 jacoco {
     toolVersion = "0.8.11"
 }
@@ -98,6 +100,11 @@ jacocoTestReport {
         }))
     }
 }
+
+// Jacoco 커버리지 검증을 check task(빌드 표준 진입점)에 연결
+// 연결 전: jacocoTestCoverageVerification을 직접 실행해야만 게이트가 동작했음 → 누락 위험
+check.dependsOn jacocoTestCoverageVerification
+jacocoTestCoverageVerification.dependsOn jacocoTestReport
 
 jacocoTestCoverageVerification {
     violationRules {
@@ -142,16 +149,14 @@ bootJar {
     }
 }
 
-// JVM 옵션 (Virtual Thread Pinning 방어 + 메모리 제약)
 tasks.named('bootRun') {
     jvmArgs = [
-            '-XX:+UseSerialGC',                // GC 메모리 오버헤드 최소화
-            '-Xmx256m',                        // t3.micro(1GB) 환경 시뮬레이션
-            '-Djdk.tracePinnedThreads=short'   // Virtual Thread Pinning 감지 및 로깅
+            '-XX:+UseSerialGC',
+            '-Xmx256m',
+            '-Djdk.tracePinnedThreads=short'
     ]
 }
 
-// 배포용 JAR (production)
 tasks.named('bootJar') {
     manifest {
         attributes(

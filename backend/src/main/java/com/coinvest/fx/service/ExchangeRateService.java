@@ -48,7 +48,9 @@ public class ExchangeRateService {
     private final KisApiManager kisApiManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    private static final int MAX_AGE_HOURS = 48;
+    // 주말 갭 대응: 금요일 09:30 → 월요일 09:30 = 72h이므로 80h로 설정
+    // KIS API는 영업일(MON-FRI)에만 호출됨. 주말 CircuitBreaker 오발화 방지.
+    private static final int MAX_AGE_HOURS = 80;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
 
     private final Map<String, ExchangeRate> localRateCache = new ConcurrentHashMap<>();
