@@ -5,7 +5,3 @@ spring:
     url: jdbc:postgresql://localhost:5432/coinvest
     username: coinvest
     password: coinvest_local_dev
-  data:
-    redis:
-      host: localhost
-      port: 6379
