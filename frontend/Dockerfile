@@ -8,7 +8,7 @@ RUN npm ci
 
 # 소스 복사 및 빌드
 COPY . .
-# 빌드 타임 환경 변수 설정 (.env.production 참조)
+# 빌드 타임 환경 변수 설정 (..env.production 참조)
 ENV NEXT_PUBLIC_API_URL=/api/v1
 RUN npm run build
 

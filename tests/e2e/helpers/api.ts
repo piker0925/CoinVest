@@ -1,6 +1,6 @@
 import { APIRequestContext, request as playwrightRequest } from '@playwright/test';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://127.0.0.1:80';
 const API_PREFIX = `${BACKEND_URL}/api/v1`;
 
 export interface TestUser {

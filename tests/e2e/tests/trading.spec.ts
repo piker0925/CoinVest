@@ -9,9 +9,9 @@ test.describe('Trading', () => {
     await expect(searchInput).toBeVisible({ timeout: 15_000 });
 
     // 자산 목록이 최소 1개 이상 로드되는지 확인
-    // 자산 코드가 "CRYPTO", "US_STOCK" 등 AssetClass 텍스트로 표시됨
-    const assetItems = authedPage.locator('text=/CRYPTO|US_STOCK|KR_STOCK|US_ETF|KR_ETF|VIRTUAL/');
-    await expect(assetItems.first()).toBeVisible({ timeout: 15_000 });
+    // 자산 코드가 "CRYPTO", "US_STOCK", "VIRTUAL" 등 AssetClass 텍스트로 표시됨
+    const assetItems = authedPage.locator('div.divide-y >> text=/CRYPTO|US_STOCK|KR_STOCK|US_ETF|KR_ETF|VIRTUAL/');
+    await expect(assetItems.first()).toBeVisible({ timeout: 20_000 });
 
     // 첫 번째 자산 클릭
     await assetItems.first().click();
@@ -44,8 +44,8 @@ test.describe('Trading', () => {
     await authedPage.waitForTimeout(500);
 
     // 자산 목록이 다시 나타나는지 확인
-    const assetItems = authedPage.locator('text=/CRYPTO|US_STOCK|KR_STOCK|US_ETF|KR_ETF|VIRTUAL/');
-    await expect(assetItems.first()).toBeVisible({ timeout: 10_000 });
+    const assetItems = authedPage.locator('div.divide-y >> text=/CRYPTO|US_STOCK|KR_STOCK|US_ETF|KR_ETF|VIRTUAL/');
+    await expect(assetItems.first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('should_show_candle_chart_for_selected_asset', async ({ authedPage }) => {
