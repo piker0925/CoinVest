@@ -1,28 +1,60 @@
-# Project docs (개인용)
+# =========================================================
+# CoinVest .gitignore
+# =========================================================
+
+# ---- 기획·설계·에이전트 툴링 (로컬 비공개) ----
+# 기획/진행상황은 GitHub에 공개하지 않는다. 공개되는 건 코드 + README뿐.
 docs/
-
-# AI Tool Config
-.gemini/
-.claude/
-GEMINI.md
+CONTEXT.md
 CLAUDE.md
+GEMINI.md
+.claude/
+.gemini/
+.agents/
+skills-lock.json
 
-# Java/Gradle
-target/
+# ---- 시크릿 / 로컬 환경 ----
+# 시크릿은 .env 에만. .env.example 과 프론트의 .env.development/.production
+# (비밀 아닌 NEXT_PUBLIC 값)은 커밋한다.
+.env
+.env.local
+.env.*.local
+*.env.local
+# application-local.yml 은 비밀 아닌 로컬 dev 기본값이므로 커밋한다(무시 안 함).
+
+# API 자격증명 안전망 (실수로 떨어져도 커밋 방지)
+docs/kis-token.json
+.kis-token.cache.json
+
+# ---- Java / Gradle ----
 **/build/
-**/out/
+**/.gradle/
+.gradletasknamecache
 *.class
 *.jar
+!**/gradle-wrapper.jar
 *.war
-*.nar
-*.zip
-*.tar.gz
+HELP.md
 
-**/.gradle/
-!gradle-wrapper.jar
-.gradletasknamecache
+# ---- Node / Next.js (frontend) ----
+**/node_modules/
+**/.next/
+**/.turbo/
+**/dist/
+**/out/
+*.tsbuildinfo
+.pnp*
+.vercel
+npm-debug.log*
+yarn-*.log*
+pnpm-debug.log*
 
-# IDE
+# ---- 테스트 산출물 ----
+**/playwright-report/
+**/test-results/
+**/coverage/
+
+# ---- IDE / OS ----
 .idea/
 .vscode/
 *.iml
@@ -31,50 +63,14 @@ target/
 *~
 .DS_Store
 
-# Environment
-.env
-.env.local
-.env.*.local
-*-local.yml
-*-local.properties
-
-# Logs
+# ---- 로그 / 임시 ----
 logs/
 *.log
-
-# Node (프론트엔드)
-node_modules/
-**/node_modules/
-dist/
-**/.next/
-**/.turbo/
-.vercel
-out/
-build/
-*.tsbuildinfo
-npm-debug.log*
-yarn-error.log*
-yarn-debug.log*
-yarn-error.log*
-.pnp*
-.pnp.js
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Environment
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-*.env.local
-*-local.yml
-*-local.properties
-
-# Temp
 tmp/
 temp/
 *.tmp
+
+# ---- 로컬 DB 파일 ----
+*.db
+*.sqlite
+*.sqlite3
