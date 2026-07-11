@@ -1,167 +1,42 @@
 plugins {
-    id 'java'
-    id 'org.springframework.boot' version '3.4.0'
-    id 'io.spring.dependency-management' version '1.1.6'
-    id 'jacoco'
-    id 'org.asciidoctor.jvm.convert' version '3.3.2'
+	id 'java'
+	id 'org.springframework.boot' version '3.5.16'
+	id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'com.coinvest'
-version = '0.1.0-SNAPSHOT'
+version = '0.0.1-SNAPSHOT'
 
 java {
-    sourceCompatibility = '21'
-    targetCompatibility = '21'
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
-    }
-    asciidoctorExtensions
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
 }
 
 repositories {
-    mavenCentral()
-}
-
-ext {
-    // 🚀 Spring Boot 3.4.0 관리 버전 사용 (필요 시에만 명시)
-    snippetsDir = file('build/generated-snippets')
+	mavenCentral()
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.retry:spring-retry'
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
-
-    // JWT
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
-
-    // Database & Migration
-    implementation 'org.postgresql:postgresql:42.7.4'
-    implementation 'org.flywaydb:flyway-core'
-    implementation 'org.flywaydb:flyway-database-postgresql'
-
-    // Hibernate Dialect fix
-    implementation 'org.hibernate.orm:hibernate-core:6.6.2.Final'
-
-    // Lombok
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-
-    // Testing (🚀 순정 상태로 복구)
-    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.testcontainers:testcontainers'
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
-    testImplementation 'com.redis:testcontainers-redis:2.2.3'
-    testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
-    asciidoctorExtensions 'org.springframework.restdocs:spring-restdocs-asciidoctor'
-
-    testCompileOnly 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	compileOnly 'org.projectlombok:lombok'
+	runtimeOnly 'org.postgresql:postgresql'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
+	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
-test {
-    outputs.dir snippetsDir
-    useJUnitPlatform()
-    finalizedBy jacocoTestReport
-    
-    // 🚀 모든 강제 환경 변수 제거 (순정 탐색 유도)
-    systemProperty "testcontainers.reuse.enable", "true"
-}
-
-jacoco {
-    toolVersion = "0.8.11"
-}
-
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = true
-        html.required = true
-    }
-    afterEvaluate {
-        classDirectories.setFrom(files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: [
-                    "**/dto/**",
-                    "**/global/config/**",
-                    "**/CoinvestApplication.class"
-            ])
-        }))
-    }
-}
-
-// Jacoco 커버리지 검증을 check task(빌드 표준 진입점)에 연결
-// 연결 전: jacocoTestCoverageVerification을 직접 실행해야만 게이트가 동작했음 → 누락 위험
-check.dependsOn jacocoTestCoverageVerification
-jacocoTestCoverageVerification.dependsOn jacocoTestReport
-
-jacocoTestCoverageVerification {
-    violationRules {
-        rule {
-            element = 'CLASS'
-            limit {
-                counter = 'LINE'
-                value = 'COVEREDRATIO'
-                minimum = 0.90
-            }
-            includes = [
-                    "com.coinvest.*.service.*"
-            ]
-        }
-        rule {
-            element = 'BUNDLE'
-            limit {
-                counter = 'LINE'
-                value = 'COVEREDRATIO'
-                minimum = 0.70
-            }
-        }
-    }
-}
-
-asciidoctor {
-    dependsOn test
-    configurations 'asciidoctorExtensions'
-    inputs.dir snippetsDir
-
-    sources {
-        include("**/index.adoc")
-    }
-
-    baseDirFollowsSourceFile()
-}
-
-bootJar {
-    dependsOn asciidoctor
-    from("${asciidoctor.outputDir}") {
-        into 'static/docs'
-    }
-}
-
-tasks.named('bootRun') {
-    jvmArgs = [
-            '-XX:+UseSerialGC',
-            '-Xmx256m',
-            '-Djdk.tracePinnedThreads=short'
-    ]
-}
-
-tasks.named('bootJar') {
-    manifest {
-        attributes(
-                'Implementation-Title': project.name,
-                'Implementation-Version': project.version
-        )
-    }
+tasks.named('test') {
+	useJUnitPlatform()
 }

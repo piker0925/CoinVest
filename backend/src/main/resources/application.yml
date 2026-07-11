@@ -2,64 +2,33 @@ spring:
   application:
     name: coinvest
   profiles:
-    active: local
-
+    active: local   # 로컬 기본값. 배포는 SPRING_PROFILES_ACTIVE=prod 로 오버라이드(env가 우선)
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: validate   # 스키마 변경은 Flyway로만. 엔티티/스키마 불일치 조기 발견
     open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-        use_sql_comments: true
-
   flyway:
-    locations: classpath:db/migration
     enabled: true
-
-  threads:
-    virtual:
-      enabled: true
-
-jwt:
-  secret: ${JWT_SECRET:local_development_secret_key_random_string_at_least_64_chars_long_!!_secure_1234567890}
-  access-token-expiration: 3600000 # 1 hour
-  refresh-token-expiration: 1209600000 # 14 days
-
-app:
-  cookie:
-    secure: false # 로컬(HTTP) 환경 기본값. 운영(HTTPS)에서는 true로 오버라이드
-
-trading:
-  bot:
-    enabled: false
-
-upbit:
-  websocket:
-    url: wss://api.upbit.com/websocket/v1
-
-kis:
-  api:
-    base-url: https://openapi.koreainvestment.com:9443
-    app-key: ${KIS_APP_KEY:}
-    app-secret: ${KIS_APP_SECRET:}
-
-coinvest:
-  alerts:
-    system-webhook-url: ${SYSTEM_DISCORD_WEBHOOK_URL:}
+    locations: classpath:db/migration
 
 server:
   port: 8080
   shutdown: graceful
-  servlet:
-    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 logging:
   level:
     root: INFO
     com.coinvest: INFO
-    org.springframework.web: INFO
-    org.hibernate.SQL: INFO
-  pattern:
-    console: "[%d{HH:mm:ss.SSS}] [%-5level] [%thread] %logger{36} - %msg%n"

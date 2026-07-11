@@ -1,0 +1,11 @@
+# 로컬 dev 프로파일 — docker-compose.yml(로컬 인프라)의 기본값과 일치.
+# 비밀 아닌 로컬 전용 값이라 커밋함(127.0.0.1 전용). 실제 시크릿은 .env / env 주입.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/coinvest
+    username: coinvest
+    password: coinvest_local_dev
+  data:
+    redis:
+      host: localhost
+      port: 6379
