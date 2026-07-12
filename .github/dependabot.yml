@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # GitHub Actions 버전(태그) 모니터링 → 1st-party 액션도 안전하게 최신 유지.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

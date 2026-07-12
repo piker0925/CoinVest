@@ -1,0 +1,38 @@
+name: CI
+
+# 빌드 + 테스트 게이트 (배포는 배포 Phase 별도). 완료 게이트의 "CI 게이트 연결" 실체.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# 최소 권한: 소스 읽기만. 이 워크플로는 PR 코멘트·릴리스·패키지 쓰기가 필요 없다.
+permissions:
+  contents: read
+
+# 같은 ref의 이전 실행은 취소(러너 절약).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test (JDK 21)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend # Gradle 프로젝트 루트는 backend/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4 # 1st-party, Dependabot 관리
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4 # 1st-party, Dependabot 관리
+        with:
+          distribution: temurin
+          java-version: '21' # 러너 기본 JDK에 의존하지 않고 21 명시 고정
+          cache: gradle # ~/.gradle 캐시 → 2회차 이후 단축
+
+      - name: Build & test
+        # 통합테스트는 Testcontainers(Postgres) — ubuntu 러너의 내장 Docker 사용.
+        run: ./gradlew build --no-daemon
