@@ -1,8 +1,8 @@
 # =========================================================
-# CoinVest — LOCAL DEV infrastructure (Postgres + Redis only)
+# CoinVest — LOCAL DEV infrastructure (Postgres only)
 # =========================================================
 # 목적: 로컬에서 백엔드/프론트를 IDE·Gradle·npm으로 직접 실행하고,
-#       그 앱이 붙을 DB/Redis만 컨테이너로 띄운다.
+#       그 앱이 붙을 DB만 컨테이너로 띄운다.
 #   기동:  docker compose up -d
 #   중지:  docker compose down        (데이터 유지)
 #   초기화: docker compose down -v      (볼륨까지 삭제)

@@ -17,14 +17,14 @@
 - **Backend**: Java 21, Spring Boot. 헥사고날(포트/어댑터) 설계 — 시세는 `MarketDataPort`(KIS 어댑터), 주문 실행은 `TradingPort`(Mock 어댑터 → 최종 Toss 실거래 어댑터).
 - **데이터**: KIS Open API (국내·해외 시세/차트).
 - **인증**: Google OAuth 위임 (직접 구현하지 않음 — 위임이 더 안전하다는 판단).
-- **인프라**: PostgreSQL, Redis. 로컬은 docker-compose, 테스트는 Testcontainers (TDD).
+- **인프라**: PostgreSQL. 로컬은 docker-compose, 테스트는 Testcontainers (TDD). 시세·토큰 캐시는 인메모리/DB로 충분해 Redis는 미채택(근거는 [DESIGN.md](DESIGN.md) §4).
 - **Frontend**: Next.js (백엔드 코어 이후 착수).
 
 ## 로컬 실행
 
 ```bash
 cp .env.example .env      # KIS 앱키/시크릿 입력
-docker compose up -d      # Postgres + Redis (로컬 인프라)
+docker compose up -d      # Postgres (로컬 인프라)
 # 백엔드/프론트 실행 방법은 재구축 진행에 따라 추가 예정
 ```
 

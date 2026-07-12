@@ -2,7 +2,7 @@
 
 > 실제 증권사처럼 동작하는 **고충실도 모의투자 + 투자 분석** 서비스. 개인 학습·사이드 프로젝트.
 > **상태**: 재구축 진행 중 — 살아있는 문서. 안정적 결정은 확정, 세부(API·ERD)는 구현 중 확정.
-> 최종 갱신: 2026-07-11
+> 최종 갱신: 2026-07-12
 
 ---
 
@@ -45,7 +45,7 @@ graph LR
 
 - **통신**: 프론트 ↔ 백엔드 = REST(`/api/v1`). 백엔드 ↔ KIS = HTTPS(REST). 시세는 온디맨드 조회(MVP), 이후 폴링 → 스트리밍.
 - **핵심 원칙 (실용적 포트/어댑터)**: 포트는 **교체가 실제로 필요한 외부 경계에만** 둔다 — `MarketDataPort`(KIS), `TradingPort`(모의=Mock → 실거래=Toss). 외부 API 규격 차이는 어댑터가 흡수. **영속성은 Spring Data JPA 리포지토리를 직접 사용**(이미 추상화라 별도 포트로 감싸지 않음 — 도그마틱 풀 헥사고날 지양). **모의투자는 KIS에 주문을 보내지 않고 자체 시뮬레이션 엔진이 KIS 시세 위에서 체결.**
-- **인프라**: 단일 인스턴스(Oracle Cloud ARM) + Docker + nginx(배포 Phase).
+- **인프라**: 단일 인스턴스(단일 VM 또는 PaaS — 배포 대상은 §9에서 확정) + Docker + nginx(배포 Phase).
 
 ### 4. 기술 스택 선택 근거
 
@@ -68,6 +68,7 @@ graph LR
 - **Redis 미채택**: 캐시 대상은 (a) KIS 토큰 (b) 시세뿐인데, **단일 인스턴스**라 "인스턴스 간 공유 캐시"라는 Redis의 이점이 없다. 토큰은 재시작 후 생존이 필요하지만 **이미 있는 PostgreSQL 테이블**로 영속하면 되고, 시세는 **인메모리 캐시(Caffeine/Spring Cache)**로 충분하다. Redis는 다중 인스턴스·실시간 pub/sub가 실제로 필요해질 때, 그 근거와 함께 도입한다.
 - **Lombok 최소화**: DTO·값객체는 Java 21 `record`로, 엔티티 boilerplate에만 제한적으로 사용(또는 명시적 코드). 애노테이션 프로세서 의존과 암묵성을 줄인다.
 - **메시지 큐(Kafka 등) 미채택**: 단일 인스턴스·현재 규모엔 스프링 `ApplicationEvent`로 충분. (옛 설계의 Kafka는 제거됨.)
+- **Kubernetes(K8s/K3s) 미채택**: HA·롤링업데이트·리소스쿼터는 **다중 사용자·다중 노드** 문제. 단일 사용자 앱엔 과설계 — Docker Compose(로컬) + 단일 VM/PaaS(배포)로 충분. liveness/readiness는 Actuator `/health`로 이미 커버.
 
 ### 5. 데이터 전략 & ERD
 
@@ -111,6 +112,7 @@ erDiagram
 - **인증**: Google OAuth 위임 + 본인 계정 화이트리스트(단일 사용자). 손짠 JWT 미도입.
 - **시크릿**: KIS 앱키·토큰, DB 자격증명은 `.env`/환경변수·DB. 코드·git 하드코딩 금지(`.env` gitignore).
 - **입력 검증**: Bean Validation으로 요청 DTO 검증.
+- **에러 응답**: RFC9457 `ProblemDetail`로 추상화(`@RestControllerAdvice` 중앙 처리). 내부 원인·스택트레이스·SQL은 로그에만, 외부 노출 금지.
 - **배포 하드닝(배포 Phase)**: TLS 종단, DB 호스트 비노출, 최소 권한 컨테이너, Cloudflare Access 검토.
 - **실거래 격리(최종 Phase)**: 실제 주문 경로는 확인·한도·킬스위치로 하드 격리.
 

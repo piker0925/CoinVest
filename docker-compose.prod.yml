@@ -1,14 +1,13 @@
 # =========================================================
-# CoinVest — PRODUCTION full stack (nginx + app + frontend + db + redis)
+# CoinVest — PRODUCTION full stack (nginx + app + frontend + db)
 # =========================================================
 # 로컬 개발엔 쓰지 않는다 (로컬은 docker-compose.yml = 인프라만).
 # 배포 파이프라인은 이 내용을 GitHub Secret(DOCKER_COMPOSE_CONTENT)으로 주입한다.
 #
 # ⚠️ 배포(하드닝) Phase 전에 반드시 고칠 것 (docs/audit 참조):
-#   - db(5432)·redis(6379) 호스트 공개 바인딩 제거 또는 127.0.0.1 한정 (P0-12)
-#   - redis --requirepass 설정 (P0-12)
-#   - 죽은 KAFKA_BOOTSTRAP_SERVERS 제거 (P2-37)
+#   - db(5432) 호스트 공개 바인딩 제거 또는 127.0.0.1 한정 (P0-12)
 #   - TLS 종단 + backend healthcheck (P1-30)
+# (redis/kafka는 스택에서 제거됨 — P0-12 redis·P2-37 kafka 항목 해소)
 
 services:
   nginx:
@@ -62,15 +61,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-coinvest}
       - SPRING_DATASOURCE_USERNAME=${DB_USER:-coinvest}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASS}
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATA_REDIS_PORT=6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - JAVA_OPTS=-Xmx256m -Xms256m
       - TZ=Asia/Seoul
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - coinvest-network
@@ -105,28 +99,9 @@ services:
       - coinvest-network
     restart: always
 
-  redis:
-    image: redis:7-alpine
-    container_name: coinvest-redis
-    ports:
-      - "6379:6379"
-    deploy:
-      resources:
-        limits:
-          memory: 100M
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - coinvest-network
-    restart: always
-
 networks:
   coinvest-network:
     driver: bridge
 
 volumes:
   postgres_data:
-  redis_data:
