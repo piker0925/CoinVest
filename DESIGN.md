@@ -81,13 +81,14 @@ erDiagram
     ACCOUNT {
       bigint id PK
       numeric cash_balance_krw
+      bigint version "낙관적 락(@Version)"
     }
     POSITION {
       bigint id PK
       bigint account_id FK
       varchar stock_code "UNIQUE(account_id, stock_code)"
       int quantity
-      numeric avg_price
+      numeric total_cost "총매입원가 KRW (평단=total_cost/quantity 파생)"
     }
     TRADE {
       bigint id PK
@@ -97,14 +98,21 @@ erDiagram
       numeric price
       int quantity
       numeric realized_pnl "SELL만, 매수는 null"
-      timestamp created_at
+      timestamptz created_at
     }
 ```
 
-설계 노트(구현 중 확정):
+설계 노트:
 - `POSITION`은 **(account_id, stock_code) UNIQUE** — 종목당 포지션 1개.
-- **realized_pnl은 매도에만** (매수는 null). 매도 시 =(체결가−평단)×수량.
-- 한국주식 **수량은 정수(주), 가격은 정수 KRW** — 정밀도 명시.
+- **원가basis 방식(증권사 표준)**: 평단을 저장하지 않고 **`total_cost`(총매입원가 정수 KRW) + `quantity`** 를 진실로 두고, 평단은 `total_cost/quantity`
+  파생. 평단 재사용에서 오는 반올림 오차 누적을 방지.
+  - **매수**: `total_cost += 체결가×수량`, `quantity += 매수량`.
+  - **매도**: `나갈원가 = round(total_cost × 매도량/quantity)`, `realized_pnl = 매도대금 − 나갈원가`(원 단위 반올림), `total_cost -= 나갈원가`,
+    `quantity -= 매도량`. **전량 매도 시 POSITION 삭제**(TRADE가 이력 보유).
+- **realized_pnl은 매도에만**(매수 null). MVP는 **gross**(수수료·세금 0); 순손익은 수수료·세금 슬라이스에서 이 구조 위에 얹음.
+- **정밀도**: 금액 컬럼 `NUMERIC(19,4)`, 수량 `int`(주). 한국주식 체결가는 정수 KRW.
+- **동시성**: `ACCOUNT.@Version`(낙관적 락)으로 더블서브밋 이중 차감 방어 → 충돌 시 **409 ProblemDetail**. Position은 UNIQUE + 트랜잭션으로 충분.
+- **시각**: `timestamptz`(UTC 저장·KST 표시 — 서버·DB TZ Asia/Seoul).
 - 시장가 즉시 체결이라 대기주문(Order) 없이 **Trade만**. 지정가 도입 시 Order(대기) 분리.
 
 ### 6. 보안 고려 사항
