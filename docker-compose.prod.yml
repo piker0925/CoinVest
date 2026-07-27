@@ -1,5 +1,5 @@
 # =========================================================
-# CoinVest — PRODUCTION full stack (nginx + app + frontend + db)
+# TradeOwl — PRODUCTION full stack (nginx + app + frontend + db)
 # =========================================================
 # 로컬 개발엔 쓰지 않는다 (로컬은 docker-compose.yml = 인프라만).
 # 배포 파이프라인은 이 내용을 GitHub Secret(DOCKER_COMPOSE_CONTENT)으로 주입한다.
@@ -12,7 +12,7 @@
 services:
   nginx:
     image: nginx:stable-alpine
-    container_name: coinvest-proxy
+    container_name: tradeowl-proxy
     ports:
       - "80:80"
     volumes:
@@ -23,12 +23,12 @@ services:
     environment:
       - TZ=Asia/Seoul
     networks:
-      - coinvest-network
+      - tradeowl-network
     restart: always
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/coinvest-frontend:latest
-    container_name: coinvest-frontend
+    image: ${DOCKERHUB_USERNAME}/tradeowl-frontend:latest
+    container_name: tradeowl-frontend
     expose:
       - "3000"
     deploy:
@@ -42,12 +42,12 @@ services:
     depends_on:
       - backend
     networks:
-      - coinvest-network
+      - tradeowl-network
     restart: always
 
   backend:
-    image: ${DOCKERHUB_USERNAME}/coinvest-app:latest
-    container_name: coinvest-app
+    image: ${DOCKERHUB_USERNAME}/tradeowl-app:latest
+    container_name: tradeowl-app
     expose:
       - "8080"
     deploy:
@@ -58,8 +58,8 @@ services:
       - .env
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-coinvest}
-      - SPRING_DATASOURCE_USERNAME=${DB_USER:-coinvest}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${DB_NAME:-tradeowl}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:-tradeowl}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASS}
       - JAVA_OPTS=-Xmx256m -Xms256m
       - TZ=Asia/Seoul
@@ -67,12 +67,12 @@ services:
       db:
         condition: service_healthy
     networks:
-      - coinvest-network
+      - tradeowl-network
     restart: always
 
   db:
     image: postgres:16-alpine
-    container_name: coinvest-db
+    container_name: tradeowl-db
     ports:
       - "5432:5432"
     deploy:
@@ -80,8 +80,8 @@ services:
         limits:
           memory: 150M
     environment:
-      - POSTGRES_DB=${DB_NAME:-coinvest}
-      - POSTGRES_USER=${DB_USER:-coinvest}
+      - POSTGRES_DB=${DB_NAME:-tradeowl}
+      - POSTGRES_USER=${DB_USER:-tradeowl}
       - POSTGRES_PASSWORD=${DB_PASS}
       - TZ=Asia/Seoul
     volumes:
@@ -90,17 +90,17 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${DB_USER:-coinvest} -d ${DB_NAME:-coinvest}",
+          "pg_isready -U ${DB_USER:-tradeowl} -d ${DB_NAME:-tradeowl}",
         ]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - coinvest-network
+      - tradeowl-network
     restart: always
 
 networks:
-  coinvest-network:
+  tradeowl-network:
     driver: bridge
 
 volumes:

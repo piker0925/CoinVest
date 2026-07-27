@@ -10,7 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "CoinVest | AI Trading Platform",
+  title: "TradeOwl | AI Trading Platform",
   description: "Next-generation multi-asset trading simulator",
 };
 

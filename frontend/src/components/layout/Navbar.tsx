@@ -20,7 +20,7 @@ export const Navbar = () => {
         <header
             className="h-16 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
-                <Link href="/" className="text-xl font-bold text-white tracking-tight">CoinVest</Link>
+                <Link href="/" className="text-xl font-bold text-white tracking-tight">TradeOwl</Link>
                 {user && (
                     <div className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 ${
                         mode === 'LIVE'

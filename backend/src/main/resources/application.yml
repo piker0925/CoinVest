@@ -1,6 +1,6 @@
 spring:
   application:
-    name: coinvest
+    name: tradeowl
   profiles:
     active: local   # 로컬 기본값. 배포는 SPRING_PROFILES_ACTIVE=prod 로 오버라이드(env가 우선)
   jpa:
@@ -31,4 +31,4 @@ management:
 logging:
   level:
     root: INFO
-    com.coinvest: INFO
+    com.tradeowl: INFO

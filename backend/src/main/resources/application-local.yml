@@ -2,6 +2,6 @@
 # 비밀 아닌 로컬 전용 값이라 커밋함(127.0.0.1 전용). 실제 시크릿은 .env / env 주입.
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/coinvest
-    username: coinvest
-    password: coinvest_local_dev
+    url: jdbc:postgresql://localhost:5432/tradeowl
+    username: tradeowl
+    password: tradeowl_local_dev

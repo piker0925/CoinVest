@@ -1,5 +1,5 @@
 # =========================================================
-# CoinVest — LOCAL DEV infrastructure (Postgres only)
+# TradeOwl — LOCAL DEV infrastructure (Postgres only)
 # =========================================================
 # 목적: 로컬에서 백엔드/프론트를 IDE·Gradle·npm으로 직접 실행하고,
 #       그 앱이 붙을 DB만 컨테이너로 띄운다.
@@ -14,21 +14,21 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: coinvest-db-dev
+    container_name: tradeowl-db-dev
     ports:
       - "127.0.0.1:5432:5432"
     environment:
-      - POSTGRES_DB=coinvest
-      - POSTGRES_USER=coinvest
-      - POSTGRES_PASSWORD=coinvest_local_dev
+      - POSTGRES_DB=tradeowl
+      - POSTGRES_USER=tradeowl
+      - POSTGRES_PASSWORD=tradeowl_local_dev
       - TZ=Asia/Seoul
     volumes:
-      - coinvest_pgdata_dev:/var/lib/postgresql/data
+      - tradeowl_pgdata_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U coinvest -d coinvest"]
+      test: ["CMD-SHELL", "pg_isready -U tradeowl -d tradeowl"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
-  coinvest_pgdata_dev:
+  tradeowl_pgdata_dev:

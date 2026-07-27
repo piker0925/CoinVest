@@ -57,7 +57,7 @@ export default function LoginPage() {
                         <CardTitle className="text-2xl font-bold">{isLogin ? '로그인' : '회원가입'}</CardTitle>
                     </div>
                     <CardDescription className="text-slate-400 font-medium">
-                        {isLogin ? 'CoinVest 시뮬레이션 플랫폼에 접속합니다.' : '신규 계정을 생성하여 투자를 시작하세요.'}
+                        {isLogin ? 'TradeOwl 시뮬레이션 플랫폼에 접속합니다.' : '신규 계정을 생성하여 투자를 시작하세요.'}
                     </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleAction}>
