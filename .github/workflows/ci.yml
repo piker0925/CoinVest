@@ -24,7 +24,7 @@ jobs:
         working-directory: backend # Gradle 프로젝트 루트는 backend/
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # 1st-party, Dependabot 관리
+        uses: actions/checkout@v7 # 1st-party, Dependabot 관리
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5 # 1st-party, Dependabot 관리
