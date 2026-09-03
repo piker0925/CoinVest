@@ -1,7 +1,47 @@
 version: 2
+
+# 방침: 생태계마다 groups로 묶어 "주 1회 PR 몇 개"로 유지한다.
+# 등록되지 않은 생태계는 정기 갱신이 돌지 않아, CVE가 터질 때만 보안 알림이 산발적으로 뜬다
+# (프런트엔드가 정확히 그 상태였고 열린 경고가 11건까지 쌓였다).
+# major 업데이트는 일부러 묶지 않는다 — 개별 PR로 와야 파급을 따져볼 수 있다.
 updates:
   # GitHub Actions 버전(태그) 모니터링 → 1st-party 액션도 안전하게 최신 유지.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]
+
+  # 프런트엔드 npm 의존성 (pnpm-lock.yaml).
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-security:
+        applies-to: security-updates
+        patterns: [ "*" ]
+      frontend-minor-patch:
+        applies-to: version-updates
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]
+
+  # 백엔드 Gradle 의존성.
+  # 지금까지 감시 대상이 아니었다 — 금융 앱에서 프런트엔드보다 중요한 쪽이 비어 있었다.
+  - package-ecosystem: gradle
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-security:
+        applies-to: security-updates
+        patterns: [ "*" ]
+      backend-minor-patch:
+        applies-to: version-updates
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]

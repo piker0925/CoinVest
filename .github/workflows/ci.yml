@@ -36,3 +36,37 @@ jobs:
       - name: Build & test
         # 통합테스트는 Testcontainers(Postgres) — ubuntu 러너의 내장 Docker 사용.
         run: ./gradlew build --no-daemon
+
+  frontend:
+    name: Frontend (Node 22 / pnpm)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7 # 1st-party, Dependabot 관리
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v7 # 1st-party, Dependabot 관리
+        with:
+          node-version: '22' # 러너 기본 Node에 의존하지 않고 명시 고정 (Dockerfile과 동일 메이저)
+
+      - name: Set up pnpm
+        # pnpm/action-setup은 3rd-party라 쓰지 않는다(이 워크플로는 1st-party 액션만 사용).
+        # 버전은 package.json의 packageManager, frontend/Dockerfile과 반드시 일치시킬 것.
+        run: npm install -g pnpm@11.24.0
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Build production image
+        # 프로덕션 이미지가 실제로 빌드되는지 여기서 검증한다.
+        # 이 스텝 안에서 next build까지 돌므로 호스트 쪽 `pnpm run build`는 따로 두지 않는다.
+        #
+        # 이 검증을 로컬에서 돌리면 의존성 전체를 매번 새로 받아야 한다.
+        # 다운로드 부담을 러너에 두는 것이 이 잡의 존재 이유 중 하나다.
+        run: docker build -t tradeowl-frontend:ci .
