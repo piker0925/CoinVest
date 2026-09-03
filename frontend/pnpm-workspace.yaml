@@ -1,0 +1,29 @@
+# pnpm 설정 파일.
+# ⚠️ pnpm 11부터 package.json의 `pnpm` 필드를 읽지 않는다 — 모든 설정은 여기에 둔다.
+#    (https://pnpm.io/package_json)
+
+# 갓 배포된 버전은 이 시간(분)만큼 격리한 뒤에야 설치한다.
+# npm 공급망 탈취(배포 직후 악성 버전 게시) 방어용. transitive 의존성에도 적용된다.
+# pnpm 11 기본값과 동일하지만, 의도한 정책임을 명시하려고 남긴다.
+minimumReleaseAge: 1440
+
+# 레지스트리로 동시에 여는 요청 수 상한.
+# pnpm 10.24+는 이 값을 워커 수에 따라 16~64로 자동 확장하고, maxsockets는 그 3배를 쓴다.
+# 즉 10코어 머신이면 registry.npmjs.org 한 곳으로 100개 넘는 연결이 한꺼번에 나간다.
+# 이 버스트를 견디지 못하는 네트워크에서는 설치가 통째로 타임아웃하므로 상한을 낮춰 고정한다
+# (대역폭이 아니라 동시 연결 수가 병목이라 회선 속도로는 해결되지 않는다).
+# 8은 충분히 낮으면서 설치가 지나치게 늘어지지 않는 선. 환경이 견디면 16까지 올려도 된다.
+networkConcurrency: 8
+
+# npm의 top-level `overrides`에서 이관 (commit aff0945).
+# pnpm은 npm overrides를 읽지 않으므로 여기 없으면 하한이 풀리고 취약 버전으로 되돌아간다.
+overrides:
+  postcss: ^8.5.18
+  sharp: ^0.35.0
+
+# pnpm은 의존성의 postinstall 스크립트를 기본 차단한다(공급망 방어).
+# 여기 올린 것만 실행을 허용 — 새 항목이 생기면 출처를 확인하고 추가할 것.
+allowBuilds:
+  # eslint-config-next → eslint-import-resolver-typescript → unrs-resolver.
+  # 네이티브 TS 경로 리졸버. 빌드 허용 안 하면 `pnpm lint`가 실패한다.
+  unrs-resolver: true
